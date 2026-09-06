@@ -163,6 +163,14 @@ const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
 const random=(a,b)=>a+Math.random()*(b-a);
 const choose=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{
+ const r=a.slice();
+ for(let i=r.length-1;i>0;i--){
+  const j=Math.floor(Math.random()*(i+1));
+  [r[i],r[j]]=[r[j],r[i]];
+ }
+ return r;
+};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({
  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
 }[c]));
@@ -443,14 +451,14 @@ function build(){
 }
 
 function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"){
- const pool=MUTATIONS
-  .filter(x=>rank(x.id)<x.max)
-  .sort(()=>Math.random()-.5)
-  .slice(0,3);
+ const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3);
 
  if(!pool.length){
   heal(2);
-  done();
+  show("FULLY <span>BLOOMED</span>",
+   "Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+   [],
+   [{title:"CONTINUE",fn:done}]);
   return;
  }
 
