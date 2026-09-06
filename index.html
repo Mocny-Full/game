@@ -43,7 +43,7 @@ h1{font-size:clamp(30px,6vw,72px);line-height:1;margin:14px 0;letter-spacing:-.0
 h1 span{color:var(--mint)}
 .sub{max-width:820px;margin:15px auto;color:#aec0d1;line-height:1.6;font-size:14px}
 .small{color:var(--muted);font:11px/1.8 monospace;margin:15px 0}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin:22px 0}
 .card,.button{font-family:inherit;cursor:pointer}
 .card{min-height:155px;padding:20px;text-align:left;color:var(--ink);border:1px solid #304759;background:linear-gradient(145deg,#182a38,#0c1422);transition:.15s}
 .card:hover{border-color:var(--mint);transform:translateY(-3px)}
@@ -182,6 +182,7 @@ const META="void-bloom-meta-final-v2";
 let meta=read(META,{best:0,wins:0});
 let state="title",actions=[];
 let last=performance.now(),accumulator=0,visual=0,shake=0;
+let shopStock=null;
 
 let R=null,S=null,P=null,room=null;
 let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[];
@@ -384,6 +385,7 @@ function begin(frame){
 
 function route(){
  room=null;P=null;enemies=[];bullets=[];orbs=[];hazards=[];
+ shopStock=null;
 
  const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
 
@@ -392,7 +394,8 @@ function route(){
   [
    {title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
    {title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
-   {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation.",fn:rest}
+   {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation.",fn:rest},
+   {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
   ],
   [
    {title:"BUILD",secondary:true,fn:build},
@@ -448,6 +451,70 @@ function build(){
   [],
   [{title:"BACK",fn:route}],
   `<div>${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||"No mutations yet."}</div>`);
+}
+
+function shop(){
+ if(!shopStock){
+  const pool=MUTATIONS.filter(x=>rank(x.id)<x.max);
+  shopStock={mutation:pool.length?choose(pool).id:null};
+ }
+
+ const repairCost=Math.ceil((S.maxHp-R.hp)*12);
+ const rerollCost=30;
+ const mut=shopStock.mutation?MUTATIONS.find(m=>m.id===shopStock.mutation):null;
+ const mutCost=mut?25+rank(mut.id)*25:0;
+
+ show("SUPPLY <span>CACHE</span>",
+  `Trade scrap for guaranteed upgrades. Everything here is permanent, but it costs what fighting would have earned instead.`,
+  [
+   {
+    title:"FULL REPAIR",
+    tag:`${repairCost} SCRAP`,
+    desc:"Restore integrity to maximum.",
+    foot:`${R.hp}/${S.maxHp} HP`,
+    disabled:R.hp>=S.maxHp||R.scrap<repairCost,
+    fn:()=>{
+     R.scrap-=repairCost;
+     heal(S.maxHp);
+     shop();
+    }
+   },
+   {
+    title:"REROLL TOKEN",
+    tag:`${rerollCost} SCRAP`,
+    desc:"Gain one extra mutation reroll.",
+    foot:`${R.rerolls} REROLLS HELD`,
+    disabled:R.scrap<rerollCost,
+    fn:()=>{
+     R.scrap-=rerollCost;
+     R.rerolls++;
+     shop();
+    }
+   },
+   mut?{
+    title:mut.name,
+    tag:`${mutCost} SCRAP`,
+    desc:mut.desc,
+    foot:`RANK ${rank(mut.id)+1}/${mut.max}`,
+    disabled:R.scrap<mutCost,
+    fn:()=>{
+     R.scrap-=mutCost;
+     R.mods[mut.id]=rank(mut.id)+1;
+     calculate();
+     if(mut.id==="armor")heal(2);
+     const remaining=MUTATIONS.filter(x=>rank(x.id)<x.max);
+     shopStock.mutation=remaining.length?choose(remaining).id:null;
+     shop();
+    }
+   }:{
+    title:"SOLD OUT",
+    tag:"—",
+    desc:"Every mutation has already reached maximum rank.",
+    disabled:true
+   }
+  ],
+  [{title:"LEAVE",secondary:true,fn:route}],
+  `<div class="small">SCRAP ${R.scrap}</div>`);
 }
 
 function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"){
