@@ -180,12 +180,25 @@ let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[];
 
 function resize(){
  const r=canvas.getBoundingClientRect();
+
+ // iOS briefly reports a zero-size rect mid-rotation; skip rather than
+ // collapse the canvas's backing buffer to 0x0 (which renders nothing).
+ if(!r.width||!r.height)return;
+
  const scale=Math.min(devicePixelRatio||1,2);
  canvas.width=Math.round(r.width*scale);
  canvas.height=Math.round(r.height*scale);
 }
 addEventListener("resize",resize);
-addEventListener("orientationchange",()=>setTimeout(resize,50));
+
+// ResizeObserver reacts to the actual settled layout size instead of
+// guessing a delay after orientationchange, which iOS Safari can fire
+// before the rotation's layout has finished settling.
+if(window.ResizeObserver){
+ new ResizeObserver(resize).observe(canvas);
+}else{
+ addEventListener("orientationchange",()=>setTimeout(resize,300));
+}
 resize();
 
 
