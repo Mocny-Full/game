@@ -574,6 +574,7 @@ function updateHazards(dt){
 
         if(distance(P,h)<h.r+P.r){
           if(P.dash<=0)hurt();
+          if(!P)return;
         }
 
         // Damage enemies caught in the explosion.
@@ -887,6 +888,7 @@ function updateBullets(dt){
   }else if(pointSegment(P.x,P.y,b.px,b.py,b.x,b.y)<P.r+b.r){
    b.dead=true;
    hurt();
+   if(!P)return;
   }
  }
 
@@ -906,6 +908,7 @@ function update(dt){
  room.time+=dt;
 
  updateHazards(dt);
+ if(!P)return;
  updatePlayer(dt);
 
  if(room.time>4&&hazards.filter(h=>h.type==="slow").length<2){
@@ -950,9 +953,13 @@ function update(dt){
   safety++;
  }
 
- for(const e of [...enemies])updateEnemy(e,dt);
+ for(const e of [...enemies]){
+  updateEnemy(e,dt);
+  if(!P)return;
+ }
 
  updateBullets(dt);
+ if(!P)return;
 
  enemies=enemies.filter(e=>!e.dead);
 
@@ -1032,6 +1039,10 @@ function finish(win){
  R=null;
  P=null;
  room=null;
+ enemies=[];
+ bullets=[];
+ hazards=[];
+ orbs=[];
 }
 
 function burst(x,y,color,count=10,speed=150){
@@ -1053,6 +1064,10 @@ function burst(x,y,color,count=10,speed=150){
 
 function label(x,y,text,color=C.white,life=1){
  labels.push({x,y,text,color,life,max:life});
+}
+
+function ring(x,y,color,r,life=.4){
+ rings.push({x,y,r,color,life,max:life});
 }
 
 function circle(x,y,r,color,width=0){
