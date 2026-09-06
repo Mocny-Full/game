@@ -394,7 +394,7 @@ function route(){
   [
    {title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
    {title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
-   {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation.",fn:rest},
+   {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
    {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
   ],
   [
@@ -405,6 +405,7 @@ function route(){
 }
 
 function rest(){
+ R.depth++;
  heal(Math.ceil(S.maxHp*.35));
  mutationChoice(route,"REST — CHOOSE A <span>MUTATION</span>");
 }
