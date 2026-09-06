@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>VOID BLOOM: ECHOES</title>
 <style>
 :root{
@@ -13,11 +13,30 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#03060a;color:var(--ink);font-family:system-ui,sans-serif}
-body{min-height:100vh;display:grid;place-items:center;overflow:hidden}
+body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow:hidden;touch-action:none;overscroll-behavior:none}
 #stage{position:relative;width:min(1200px,100vw,calc(100dvh * 3 / 2));aspect-ratio:3/2;background:#080e18;overflow:hidden}
-canvas{display:block;width:100%;height:100%}
-#overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;overflow:auto;background:#040914e8;backdrop-filter:blur(8px)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;overflow:auto;background:#040914e8;backdrop-filter:blur(8px);touch-action:auto;z-index:5}
 #overlay.hidden{display:none}
+#rotateHint{position:fixed;top:0;left:0;right:0;padding:6px 10px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;z-index:20;display:none}
+@media(orientation:portrait) and (pointer:coarse){
+ #rotateHint{display:block}
+}
+#touch{position:absolute;inset:0;display:none;touch-action:none;z-index:4}
+#touch.active{display:block}
+#joyZone{position:absolute;left:0;top:10%;width:52%;height:78%;touch-action:none}
+#joyBase{position:absolute;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
+#joyBase.show{opacity:.9}
+#joyKnob{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
+.tbtn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none}
+.tbtn:active{opacity:1;transform:scale(.94)}
+#btnDash{width:76px;height:76px;right:104px;bottom:26px}
+#btnPulse{width:76px;height:76px;right:20px;bottom:26px;background:var(--gold)}
+#btnPause{width:42px;height:42px;right:16px;top:16px;background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
+@media(max-width:700px){
+ #btnDash{width:62px;height:62px;right:82px;bottom:14px}
+ #btnPulse{width:62px;height:62px;right:14px;bottom:14px}
+}
 .panel{width:min(1000px,100%);text-align:center}
 .eyebrow{color:var(--mint);font:700 12px monospace;letter-spacing:.2em}
 h1{font-size:clamp(30px,6vw,72px);line-height:1;margin:14px 0;letter-spacing:-.06em}
@@ -50,9 +69,18 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
 </style>
 </head>
 <body>
+<div id="rotateHint">ROTATE TO LANDSCAPE FOR THE BEST EXPERIENCE</div>
 <div id="stage">
 <canvas id="game"></canvas>
 <div id="overlay"></div>
+<div id="touch">
+ <div id="joyZone"></div>
+ <div id="joyBase"></div>
+ <div id="joyKnob"></div>
+ <button type="button" id="btnDash" class="tbtn">DASH</button>
+ <button type="button" id="btnPulse" class="tbtn">PULSE</button>
+ <button type="button" id="btnPause" class="tbtn">II</button>
+</div>
 </div>
 
 <script>
@@ -68,6 +96,67 @@ const canvas=document.querySelector("#game");
 const ctx=canvas.getContext("2d");
 const overlay=document.querySelector("#overlay");
 const keys=new Set();
+
+const isTouch=matchMedia("(pointer:coarse)").matches;
+const touchUI=document.querySelector("#touch");
+const joyZone=document.querySelector("#joyZone");
+const joyBase=document.querySelector("#joyBase");
+const joyKnob=document.querySelector("#joyKnob");
+const btnDash=document.querySelector("#btnDash");
+const btnPulse=document.querySelector("#btnPulse");
+const btnPause=document.querySelector("#btnPause");
+
+const touchMove={x:0,y:0};
+let joyId=null,joyOrigin={x:0,y:0};
+const JOY_RADIUS=52;
+
+function setJoy(clientX,clientY,originX,originY){
+ const r=canvas.getBoundingClientRect();
+ joyBase.style.left=(originX-r.left)+"px";
+ joyBase.style.top=(originY-r.top)+"px";
+ joyKnob.style.left=(clientX-r.left)+"px";
+ joyKnob.style.top=(clientY-r.top)+"px";
+}
+
+joyZone.addEventListener("pointerdown",e=>{
+ if(joyId!==null)return;
+ joyId=e.pointerId;
+ joyZone.setPointerCapture(joyId);
+ joyOrigin={x:e.clientX,y:e.clientY};
+ setJoy(e.clientX,e.clientY,e.clientX,e.clientY);
+ joyBase.classList.add("show");
+});
+
+joyZone.addEventListener("pointermove",e=>{
+ if(e.pointerId!==joyId)return;
+ let dx=e.clientX-joyOrigin.x;
+ let dy=e.clientY-joyOrigin.y;
+ const len=Math.hypot(dx,dy);
+ if(len>JOY_RADIUS){dx=dx/len*JOY_RADIUS;dy=dy/len*JOY_RADIUS;}
+ setJoy(joyOrigin.x+dx,joyOrigin.y+dy,joyOrigin.x,joyOrigin.y);
+ touchMove.x=dx/JOY_RADIUS;
+ touchMove.y=dy/JOY_RADIUS;
+});
+
+function joyRelease(e){
+ if(e.pointerId!==joyId)return;
+ joyId=null;
+ touchMove.x=0;
+ touchMove.y=0;
+ joyBase.classList.remove("show");
+}
+joyZone.addEventListener("pointerup",joyRelease);
+joyZone.addEventListener("pointercancel",joyRelease);
+
+function tapButton(el,fn){
+ el.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  fn();
+ });
+}
+tapButton(btnDash,()=>dash());
+tapButton(btnPulse,()=>pulse());
+tapButton(btnPause,()=>pause());
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -96,6 +185,7 @@ function resize(){
  canvas.height=Math.round(r.height*scale);
 }
 addEventListener("resize",resize);
+addEventListener("orientationchange",()=>setTimeout(resize,50));
 resize();
 
 
@@ -174,6 +264,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
  state="menu";
  keys.clear();
  actions=[];
+ touchUI.classList.remove("active");
 
  const cardHTML=cards.map((a,i)=>{
   if(!a.disabled)actions[i]=a.fn;
@@ -198,7 +289,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
   ${extra}
   ${cards.length?`<div class="cards">${cardHTML}</div>`:""}
   <div class="buttons">${buttonHTML}</div>
-  <div class="small">CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE</div>
+  <div class="small">${isTouch?"TAP TO CHOOSE · LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS · II PAUSE":"CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE"}</div>
  </div>`;
 
  overlay.classList.remove("hidden");
@@ -219,6 +310,7 @@ function hide(){
  keys.clear();
  actions=[];
  state="playing";
+ if(isTouch)touchUI.classList.add("active");
 }
 
 function title(){
@@ -233,15 +325,15 @@ function title(){
    {title:"HOW TO PLAY",secondary:true,fn:help}
   ],
   `<div class="small">BEST ${meta.best.toLocaleString()} · ${meta.wins} VICTORIES<br>
-  SPACE DASH · E PULSE · WASD / ARROWS MOVE</div>`);
+  ${isTouch?"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS":"SPACE DASH · E PULSE · WASD / ARROWS MOVE"}</div>`);
 }
 
 function help(){
  show("READ THE <span>DANGER</span>",
   "Every enemy has a distinct silhouette and a visible health-shard bar. Chargers telegraph their rush. Snipers draw a firing line. Pink fields slow movement by 65% while you stand inside them.<br><br>Dash cooldowns are long and pulse energy is scarce. Do not spend either ability simply to move faster.",
   [
-   {title:"DASH",tag:"SPACE",desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",foot:"Cooldown: roughly 2.3–3.3 seconds."},
-   {title:"PULSE",tag:"E",desc:"Clears bullets and damages nearby enemies.",foot:"Recharge is intentionally slow."},
+   {title:"DASH",tag:isTouch?"BUTTON":"SPACE",desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",foot:"Cooldown: roughly 2.3–3.3 seconds."},
+   {title:"PULSE",tag:isTouch?"BUTTON":"E",desc:"Clears bullets and damages nearby enemies.",foot:"Recharge is intentionally slow."},
    {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, stars snipe, rings summon.",foot:"Health shards show remaining HP."}
   ],
   [{title:"BACK",fn:title}]);
@@ -509,10 +601,10 @@ function updatePlayer(dt){
  P.orbit+=dt*2.5;
 
  const mx=+(keys.has("d")||keys.has("arrowright"))-
-  +(keys.has("a")||keys.has("arrowleft"));
+  +(keys.has("a")||keys.has("arrowleft"))+touchMove.x;
 
  const my=+(keys.has("s")||keys.has("arrowdown"))-
-  +(keys.has("w")||keys.has("arrowup"));
+  +(keys.has("w")||keys.has("arrowup"))+touchMove.y;
 
  const len=Math.hypot(mx,my)||1;
  const slow=playerSlowMultiplier();
@@ -1332,7 +1424,7 @@ drawPlayerShards();
 
  if(P){
   text(
-    "[SPACE] DASH",
+    isTouch?"DASH":"[SPACE] DASH",
     24,
     H-48,
     12,
@@ -1357,7 +1449,7 @@ drawPlayerShards();
   );
 
   text(
-    "[E] PULSE",
+    isTouch?"PULSE":"[E] PULSE",
     330,
     H-48,
     12,
