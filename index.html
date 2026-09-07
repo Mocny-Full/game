@@ -272,7 +272,13 @@ const sfx={
  lance(){tone(500,.14,"sawtooth",.12,900)},
  chain(){tone(700,.05,"square",.08,1400)},
  wave(){tone(220,.1,"sawtooth",.1,140)},
- bossAttack(){tone(150,.2,"sawtooth",.16,50)},
+ bossSpawn(){tone(70,.7,"sawtooth",.24,220);tone(55,.9,"sine",.26,35,.15);noiseBurst(.5,.16,220)},
+ bossTell(){tone(240,.14,"square",.1,180)},
+ bossRadial(){noiseBurst(.12,.22,900);tone(320,.1,"square",.12,700)},
+ bossCharge(){tone(200,.5,"sawtooth",.2,950)},
+ bossSummon(){tone(500,.08,"sine",.12);tone(650,.08,"sine",.12,null,.06);tone(820,.1,"sine",.14,null,.12)},
+ bossHit(){tone(170,.05,"square",.05,110)},
+ bossEnrage(){tone(90,.6,"sawtooth",.26,45);noiseBurst(.4,.22,260)},
  bossDefeat(){tone(120,.9,"sawtooth",.3,25);tone(300,.5,"triangle",.2,null,.25);tone(500,.7,"triangle",.22,null,.5)},
  levelUp(){tone(523,.12,"sine",.16);tone(659,.12,"sine",.16,null,.09);tone(784,.22,"sine",.2,null,.18)},
  roomClear(){tone(392,.15,"triangle",.18);tone(523,.15,"triangle",.18,null,.12);tone(659,.25,"triangle",.22,null,.24)},
@@ -282,7 +288,7 @@ const sfx={
  pause(){tone(400,.08,"sine",.09)}
 };
 
-function startAmbient(){
+function startAmbient(intense){
  const ctx=ensureAudio();
  if(!ctx||ambientNodes)return;
 
@@ -293,14 +299,16 @@ function startAmbient(){
  const lfo=ctx.createOscillator();
  const lfoGain=ctx.createGain();
 
+ // A boss fight swaps the fifth for a tritone and speeds/deepens the
+ // filter LFO — same drone, more tension.
  osc1.type="sine";osc1.frequency.value=55;
- osc2.type="sine";osc2.frequency.value=55*1.5;
- filter.type="lowpass";filter.frequency.value=300;
+ osc2.type="sine";osc2.frequency.value=intense?55*1.414:55*1.5;
+ filter.type="lowpass";filter.frequency.value=intense?420:300;
  gain.gain.value=0;
- gain.gain.linearRampToValueAtTime(.05,ctx.currentTime+2);
+ gain.gain.linearRampToValueAtTime(intense?.07:.05,ctx.currentTime+2);
 
- lfo.frequency.value=.05;
- lfoGain.gain.value=150;
+ lfo.frequency.value=intense?.12:.05;
+ lfoGain.gain.value=intense?220:150;
  lfo.connect(lfoGain);
  lfoGain.connect(filter.frequency);
 
@@ -755,7 +763,7 @@ function startCombat(){
   hits:new Set(),orbit:0,wake:0,
   lanceFire:0,chainFire:0
  };
- startAmbient();
+ startAmbient(room.type==="boss");
  hide();
 }
 
@@ -1214,6 +1222,10 @@ function bullet(x,y,a,speed,good,damage){
 function damageEnemy(e,damage){
  if(!e||e.dead||e.born>0)return;
 
+ if(e.type==="boss"&&e.hit<=0){
+  sfx.bossHit();
+ }
+
  e.hp-=damage;
  e.hit=.08;
 
@@ -1276,10 +1288,12 @@ function spawnBoss(){
   age:0,slow:0,burn:0,hit:0,orbitHit:0,
   tell:0,aim:0,
   attackIndex:0,attackTimer:2.5,
-  chargeState:0,chargeAim:0,chargeTimer:0
+  chargeState:0,chargeAim:0,chargeTimer:0,
+  enrageStage:0
  };
 
  enemies.push(boss);
+ sfx.bossSpawn();
  return boss;
 }
 
@@ -1293,17 +1307,20 @@ function runBossAttack(e){
   for(let i=0;i<count;i++){
    bullet(e.x,e.y,i*TAU/count,240,false,1);
   }
+
+  sfx.bossRadial();
  }else if(e.attackIndex===1){
   e.chargeAim=angle(e,P);
   e.chargeState=1;
   e.chargeTimer=.5;
+  sfx.bossCharge();
  }else{
   for(let i=0;i<3;i++){
    spawn(choose(["seeker","gunner"]));
   }
- }
 
- sfx.bossAttack();
+  sfx.bossSummon();
+ }
 }
 
 function updateBoss(e,dt){
@@ -1316,7 +1333,14 @@ function updateBoss(e,dt){
  e.hit=Math.max(0,e.hit-dt);
 
  const hpFrac=e.hp/e.maxHp;
- const cycle=hpFrac<.33?1.6:hpFrac<.66?2.1:2.6;
+ const stage=hpFrac<.33?2:hpFrac<.66?1:0;
+ const cycle=stage===2?1.6:stage===1?2.1:2.6;
+
+ if(stage>e.enrageStage){
+  e.enrageStage=stage;
+  sfx.bossEnrage();
+  label(e.x,e.y-70,"ENRAGED",e.color,1.2);
+ }
 
  if(e.chargeState===1){
   e.x+=Math.cos(e.chargeAim)*680*dt;
@@ -1338,6 +1362,7 @@ function updateBoss(e,dt){
    e.tell=.9;
    e.aim=angle(e,P);
    e.attackTimer=cycle;
+   sfx.bossTell();
   }
  }
 
