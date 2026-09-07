@@ -1158,7 +1158,8 @@ function begin(frame){
   mods:{},weapons:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
   rerolls:2+metaRank("memory"),
   lastReflectionDepth:-99,
-  mutationPicks:0
+  mutationPicks:0,
+  firstCombatDone:false
  };
  calculate();
  R.hp=S.maxHp;
@@ -1171,7 +1172,7 @@ function begin(frame){
 }
 
 const NODE_INFO={
- combat:{title:"COMBAT",title_pl:"WALKA",tag:"FIVE WAVES",tag_pl:"PIĘĆ FAL",desc:"Escalating enemy waves.",desc_pl:"Narastające fale wrogów.",fn:()=>enter("combat")},
+ combat:{title:"COMBAT",title_pl:"WALKA",tag:"3-5 WAVES",tag_pl:"3-5 FAL",desc:"Escalating enemy waves.",desc_pl:"Narastające fale wrogów.",fn:()=>enter("combat")},
  elite:{title:"ELITE",title_pl:"ELITA",tag:"SIX WAVES",tag_pl:"SZEŚĆ FAL",desc:"Stronger enemies, faster projectiles, better rewards.",desc_pl:"Silniejsi wrogowie, szybsze pociski, lepsze nagrody.",fn:()=>enter("elite")},
  rest:{title:"REST",title_pl:"ODPOCZYNEK",tag:"RECOVERY",tag_pl:"REGENERACJA",desc:"Repair 35% HP and choose a mutation. The depth still advances.",desc_pl:"Naprawia 35% HP i pozwala wybrać mutację. Głębokość mimo to wzrasta.",fn:rest},
  shop:{title:"SHOP",title_pl:"SKLEP",tag:()=>`${R.scrap} ${t("scrap_suffix")}`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",desc_pl:"Wydaj złom na naprawy, żetony przerzutu lub gwarantowaną mutację.",fn:shop},
@@ -1306,11 +1307,25 @@ function unknownEvent(){
 function enter(type){
  const endless=R.depth>=28;
 
+ // Plain combat rooms run either 3 or 5 waves (never a fixed 5 anymore —
+ // the original 5-wave-every-time pacing dragged, especially as the very
+ // first fight of a run). The first combat room is always the short one
+ // so a new run doesn't open with its longest possible fight; every
+ // combat room after that is a coin flip. Elite/boss/endless are
+ // unaffected. See wave() for the matching intensity ramp: a 3-wave room
+ // escalates faster per wave to stay "short but sharp" instead of just
+ // feeling like a truncated 5-wave room.
+ let combatWaves=5;
+ if(!endless&&type==="combat"){
+  combatWaves=R.firstCombatDone?choose([3,5]):3;
+  R.firstCombatDone=true;
+ }
+
  room={
   type:endless?"endless":type,
   depth:R.depth+1,
   wave:0,
-  maxWaves:endless?999:type==="elite"?6:5,
+  maxWaves:endless?999:type==="elite"?6:combatWaves,
   wait:1,
   time:0,
   pending:[],
@@ -1589,7 +1604,12 @@ function wave(){
  room.wave++;
  sfx.wave();
 
- let count=13+room.wave*4+Math.floor(R.depth*.8);
+ // First wave is identical regardless of room length; a 3-wave room then
+ // ramps up per additional wave nearly twice as fast as a 5-wave one, so
+ // it stays a short, sharp spike rather than reading as a 5-wave room
+ // that just stops early.
+ const perWaveGrowth=room.maxWaves===3?7:4;
+ let count=13+4+Math.floor(R.depth*.8)+(room.wave-1)*perWaveGrowth;
  if(room.type==="elite")count+=9;
 
  // Heavy, slow tanks lead the enemy roster; the ranged tri-shot gunner
