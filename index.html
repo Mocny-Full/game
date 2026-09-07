@@ -683,7 +683,8 @@ let meta=read(META,{best:0,wins:0,spores:0,upgrades:{}});
 meta.spores=meta.spores||0;
 meta.upgrades=meta.upgrades||{};
 let state="title",actions=[];
-let last=performance.now(),accumulator=0,visual=0,shake=0;
+let last=performance.now(),accumulator=0,visual=0,shake=0,deathFlash=0;
+const DEATH_FLASH_TIME=.4;
 let shopStock=null;
 
 let R=null,S=null,P=null,room=null;
@@ -1857,15 +1858,26 @@ function updateWeapons(dt){
  }
 }
 
+// Forked Bloom (and a frame's own base shot count) add bullets, not free
+// damage: each individual bullet hits softer as the volley gets wider, so
+// the total damage still rises with shot count but nowhere near linearly
+// (was a flat multiply — 4 shots meant 4x damage; now it tops out well
+// under 3x).
+function shotDamageMultiplier(shots){
+ return shots<=1?1:shots===2?.75:shots===3?.65:shots===4?.6:.55;
+}
+
 function firePlayer(){
  const target=nearest(P.x,P.y);
  if(!target)return;
 
  P.angle=angle(P,target);
 
+ const perShotDamage=S.damage*shotDamageMultiplier(S.shots);
+
  for(let i=0;i<S.shots;i++){
   const spread=(i-(S.shots-1)/2)*.1;
-  bullet(P.x,P.y,P.angle+spread,760,true,S.damage);
+  bullet(P.x,P.y,P.angle+spread,760,true,perShotDamage);
  }
 
  sfx.shoot();
@@ -1992,6 +2004,7 @@ function hurt(dmg=1){
 function beginDeath(){
  if(state==="dying")return;
  state="dying";
+ deathFlash=DEATH_FLASH_TIME;
 
  if(Math.random()<.7){
   label(600,340,choose(lang==="pl"?DEATH_ECHOES_PL:DEATH_ECHOES),C.spectral,1.6);
@@ -2264,7 +2277,7 @@ function updateReflection(e,dt){
  }
 }
 
-const TANK_BOMB_TIME=1.5;
+const TANK_BOMB_TIME=1;
 
 function explodeTank(e){
  const blastR=e.r+60;
@@ -3433,6 +3446,18 @@ function draw(){
 
  ctx.restore();
  drawHUD();
+
+ // A brief full-screen pane at the moment of death — covers the whole
+ // canvas (HUD bars included), not just the play field, then fades out
+ // over DEATH_FLASH_TIME so the death-echo label reads as emerging from
+ // behind it rather than just floating on the battlefield like any other
+ // label.
+ if(deathFlash>0){
+  ctx.globalAlpha=(deathFlash/DEATH_FLASH_TIME)*.85;
+  ctx.fillStyle=C.spectral;
+  ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=1;
+ }
 }
 
 function drawWeapons(){
@@ -3448,6 +3473,7 @@ function drawWeapons(){
 
 function effects(dt){
  shake=Math.max(0,shake-dt*25);
+ deathFlash=Math.max(0,deathFlash-dt);
 
  for(const p of particles){
   p.x+=p.vx*dt;
