@@ -179,7 +179,9 @@ const read=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))??f}catch{retur
 const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 
 const META="void-bloom-meta-final-v2";
-let meta=read(META,{best:0,wins:0});
+let meta=read(META,{best:0,wins:0,spores:0,upgrades:{}});
+meta.spores=meta.spores||0;
+meta.upgrades=meta.upgrades||{};
 let state="title",actions=[];
 let last=performance.now(),accumulator=0,visual=0,shake=0;
 let shopStock=null;
@@ -236,6 +238,13 @@ const MUTATIONS=[
  ["drone","Orbiting Thorn",3,"Gain orbiting damage.","ORBITAL"]
 ].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4]}));
 
+const META_UPGRADES=[
+ ["vitality","Deep Roots",5,"+1 starting max HP per rank.",60],
+ ["cache","Stocked Cache",5,"+10 starting scrap per rank.",40],
+ ["memory","Spare Blooms",3,"+1 starting mutation reroll per rank.",100],
+ ["headstart","Head Start",1,"Begin every run with one mutation already chosen.",250]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],baseCost:x[4]}));
+
 const ENEMIES={
  seeker:{hp:36,r:13,speed:94,color:C.pink,xp:3,shape:"triangle"},
  gunner:{hp:62,r:16,speed:62,color:C.gold,xp:5,shape:"square"},
@@ -254,6 +263,7 @@ const BIOMES=[
 ];
 
 function rank(id){return R?.mods?.[id]||0}
+function metaRank(id){return meta.upgrades[id]||0}
 function xpNeeded(){return Math.floor(48+R.level*30+Math.pow(R.level,1.35)*5)}
 function heal(n){R.hp=Math.min(S.maxHp,R.hp+n)}
 
@@ -261,7 +271,7 @@ function calculate(){
  const f=FRAMES.find(x=>x.id===R.frame)||FRAMES[0];
 
  S={
-  maxHp:f.hp+rank("armor"),
+  maxHp:f.hp+rank("armor")+metaRank("vitality"),
   speed:f.speed*(1+.12*rank("speed")),
   damage:f.damage*Math.pow(1.24,rank("power")),
   rate:f.rate/Math.pow(1.16,rank("rate")),
@@ -344,10 +354,39 @@ function title(){
   [],
   [
    {title:"NEW EXPEDITION",fn:frameSelect},
+   {title:"THE GARDEN",secondary:true,fn:garden},
    {title:"HOW TO PLAY",secondary:true,fn:help}
   ],
-  `<div class="small">BEST ${meta.best.toLocaleString()} · ${meta.wins} VICTORIES<br>
+  `<div class="small">BEST ${meta.best.toLocaleString()} · ${meta.wins} VICTORIES · ${meta.spores} SPORES<br>
   ${isTouch?"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS":"SPACE DASH · E PULSE · WASD / ARROWS MOVE"}</div>`);
+}
+
+function upgradeCost(u,r){return u.baseCost*(r+1)}
+
+function garden(){
+ show("TEND THE <span>GARDEN</span>",
+  "Spend spores on permanent upgrades. Every future expedition starts with whatever is unlocked here.",
+  META_UPGRADES.map(u=>{
+   const r=metaRank(u.id);
+   const maxed=r>=u.max;
+   const cost=upgradeCost(u,r);
+
+   return {
+    title:u.name,
+    tag:maxed?"MAXED":`${cost} SPORES`,
+    desc:u.desc,
+    foot:`RANK ${r}/${u.max}`,
+    disabled:maxed||meta.spores<cost,
+    fn:()=>{
+     meta.spores-=cost;
+     meta.upgrades[u.id]=r+1;
+     write(META,meta);
+     garden();
+    }
+   };
+  }),
+  [{title:"BACK",secondary:true,fn:title}],
+  `<div class="small">SPORES ${meta.spores}</div>`);
 }
 
 function help(){
@@ -375,12 +414,18 @@ function frameSelect(){
 function begin(frame){
  R={
   frame,depth:0,level:1,xp:0,
-  hp:FRAMES.find(x=>x.id===frame).hp,
-  mods:{},kills:0,score:0,scrap:30,time:0,
-  rerolls:2
+  hp:0,
+  mods:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
+  rerolls:2+metaRank("memory")
  };
  calculate();
- route();
+ R.hp=S.maxHp;
+
+ if(metaRank("headstart")){
+  mutationChoice(route,"HEAD START — CHOOSE A <span>MUTATION</span>");
+ }else{
+  route();
+ }
 }
 
 function route(){
@@ -1095,6 +1140,9 @@ function completeRoom(){
 function finish(win){
  meta.best=Math.max(meta.best,R.score);
  if(win)meta.wins++;
+
+ const sporesEarned=Math.floor(R.score/100)+R.depth;
+ meta.spores+=sporesEarned;
  write(META,meta);
 
  show(
@@ -1109,6 +1157,7 @@ function finish(win){
    <div><b>${R.score.toLocaleString()}</b><small>SCORE</small></div>
    <div><b>${R.kills}</b><small>KILLS</small></div>
    <div><b>${R.depth}</b><small>ROOMS</small></div>
+   <div><b>+${sporesEarned}</b><small>SPORES</small></div>
   </div>`
  );
 
