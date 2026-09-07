@@ -801,10 +801,10 @@ const MUTATIONS=[
   "+1 maks. HP i naprawia 2.",
   "Ogród naprawia cię, zanim zdążysz się skrzywić z bólu. Nie prosiłeś go o to.",
   "To już nie jest leczenie. To po prostu decyzja, że nigdy nie zostałeś zraniony."],
- ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE",
+ ["pulse","Event Horizon",4,"Pulse damage increases and it takes less energy to trigger.","PULSE",
   "Something in your chest learned to push back. It wasn't there before you arrived.",
   "The pulse doesn't come from you. You just happen to be where it comes out.",
-  "Obrażenia pulsu rosną, a jego koszt maleje.",
+  "Obrażenia pulsu rosną, a do jego odpalenia potrzeba mniej energii.",
   "Coś w twojej piersi nauczyło się odpychać. Nie było tego, zanim tu przybyłeś.",
   "Puls nie pochodzi od ciebie. Ty tylko akurat stoisz tam, gdzie on wychodzi."],
  ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE",
@@ -1017,7 +1017,9 @@ function calculate(){
   dashCD:f.dash*Math.pow(.9,rank("dash")),
   dashDamage:70+30*rank("dash"),
 
-  // Pulse deliberately recharges much more slowly.
+  // pulseCost is the energy meter's fill target, not a resource spent
+  // elsewhere — lowering it via the pulse mutation means less waiting
+  // before the meter reaches "ready," i.e. a faster effective recharge.
  pulseCost:100*Math.pow(.95,rank("pulse")),
 pulseDamage:190+70*rank("pulse"),
 
