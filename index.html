@@ -956,7 +956,11 @@ const META_UPGRADES=[
  ["memory","Spare Blooms",3,"+1 starting mutation reroll per rank.",100,
   "Zapasowe Kwiaty","+1 startowy przerzut mutacji na rangę."],
  ["headstart","Head Start",1,"Begin every run with one mutation already chosen.",250,
-  "Przewaga Startowa","Zaczynaj każdą wyprawę z jedną mutacją już wybraną."]
+  "Przewaga Startowa","Zaczynaj każdą wyprawę z jedną mutacją już wybraną."],
+ ["choice","Wider Bloom",2,"+1 mutation choice offered per rank.",90,
+  "Szerszy Rozkwit","+1 oferowana mutacja do wyboru na rangę."],
+ ["loadout","Salvaged Weapon",1,"Begin every run with one weapon already reclaimed at rank 1.",200,
+  "Odzyskana Broń","Zaczynaj każdą wyprawę z jedną bronią już odzyskaną na randze 1."]
 ].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],baseCost:x[4],name_pl:x[5],desc_pl:x[6]}));
 
 const ENEMIES={
@@ -976,8 +980,12 @@ const BIOMES=[
  {name:"EVENT HORIZON",name_pl:"HORYZONT ZDARZEŃ",color:C.blue,bg:"#102334"}
 ];
 
+// BLOOMSHEAR gets its own hpMult on top of the shared depth scaling — at
+// depth 7 the player has only had six rooms to build up, so the shared
+// formula alone left it feeling like a non-event compared to the later
+// three guardians (whose depth scaling had already caught up by then).
 const BOSSES=[
- {name:"BLOOMSHEAR",color:C.mint},
+ {name:"BLOOMSHEAR",color:C.mint,hpMult:1.4},
  {name:"THE CATALOGUER",color:C.violet},
  {name:"FURNACE CORE",color:C.gold},
  {name:"THE OCCULTATION",color:C.blue}
@@ -1014,7 +1022,7 @@ function calculate(){
 pulseDamage:190+70*rank("pulse"),
 
 // Pulse now takes considerably longer to recharge.
-energyRate:.42+rank("battery")*.42
+energyRate:.48+rank("battery")*.48
  };
 
  R.hp=Math.min(R.hp,S.maxHp);
@@ -1167,6 +1175,8 @@ function begin(frame){
  };
  calculate();
  R.hp=S.maxHp;
+
+ if(metaRank("loadout"))R.weapons[choose(WEAPONS).id]=1;
 
  if(metaRank("headstart")){
   mutationChoice(route,t("head_start_title"));
@@ -1509,7 +1519,7 @@ function mutationChoice(done,title=null){
  // Weapons are never offered here — they're the player's own pieces, only
  // ever reclaimed with scrap in the shop. This screen is purely the
  // garden's gifts.
- const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3);
+ const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3+metaRank("choice"));
 
  if(!pool.length){
   heal(2);
@@ -2019,20 +2029,25 @@ function beginDeath(){
 }
 
 function spawnBoss(){
- const def=BOSSES[Math.min(3,Math.floor(R.depth/7))];
+ const idx=Math.min(3,Math.floor(R.depth/7));
+ const def=BOSSES[idx];
  const hpScale=1+R.depth*.1;
+ const hp=850*hpScale*(def.hpMult||1);
+ const firstBoss=idx===0;
 
  const boss={
   type:"boss",shape:"boss",
   name:def.name,color:def.color,
   x:600,y:230,r:46,
-  hp:850*hpScale,maxHp:850*hpScale,
+  hp,maxHp:hp,
   elite:true,born:1.2,dead:false,id:Math.random(),
   age:0,slow:0,burn:0,hit:0,orbitHit:0,
   tell:0,aim:0,
-  attackIndex:0,attackTimer:2.5,
+  // BLOOMSHEAR opens its first attack sooner than the later guardians,
+  // instead of giving the player a long free window right at the start.
+  attackIndex:0,attackTimer:firstBoss?1.6:2.5,
   chargeState:0,chargeAim:0,chargeTimer:0,
-  enrageStage:0
+  enrageStage:0,firstBoss
  };
 
  enemies.push(boss);
@@ -2136,7 +2151,12 @@ function updateBoss(e,dt){
 
  const hpFrac=e.hp/e.maxHp;
  const stage=hpFrac<.33?2:hpFrac<.66?1:0;
- const cycle=stage===2?1.6:stage===1?2.1:2.6;
+ // BLOOMSHEAR attacks noticeably more often at every stage than the
+ // later guardians, so it doesn't read as a pushover next to them —
+ // clamped so its enraged stage doesn't get uncomfortably close to the
+ // .9s attack tell itself.
+ const baseCycle=stage===2?1.6:stage===1?2.1:2.6;
+ const cycle=e.firstBoss?Math.max(1.3,baseCycle-.5):baseCycle;
 
  if(stage>e.enrageStage){
   e.enrageStage=stage;
