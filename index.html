@@ -2113,14 +2113,20 @@ const MERGE_TIME=5;
 // player loses nothing by preventing it and an unfocused one trades
 // numbers for a sharper threat. Two already-merged (tier-1) enemies can
 // merge again into a tier-2 "mother", which cannot merge further.
+//
+// Mother-spawned (noReward) enemies are still allowed that first merge
+// (into tier-1), but never the second: a noReward tier-1 is excluded
+// from pairing again, so a mother's own brood can never produce another
+// mother. Without this, mother -> children -> merge -> merge -> new
+// mother is an unbounded spawn chain.
 function updateMerging(dt){
  for(const e of enemies){
-  if(e.dead||e.born>0||e.mother||!MELTABLE.includes(e.type))continue;
+  if(e.dead||e.born>0||e.mother||!MELTABLE.includes(e.type)||(e.overdrive&&e.noReward))continue;
 
   let partner=null,bestDist=Infinity;
 
   for(const o of enemies){
-   if(o===e||o.dead||o.born>0||o.mother||o.type!==e.type||o.overdrive!==e.overdrive)continue;
+   if(o===e||o.dead||o.born>0||o.mother||o.type!==e.type||o.overdrive!==e.overdrive||(o.overdrive&&o.noReward))continue;
 
    const d=distance(e,o);
    if(d<(e.r+o.r)*.55&&d<bestDist){
@@ -2158,6 +2164,9 @@ function mergeEnemies(e,partner){
   born:.4,dead:false,overdrive:true,mother:becomingMother,
   mergeTimer:0,mergeWith:null,
   motherTimer:becomingMother?1.5:undefined,
+  // Taint spreads regardless of which parent this spread from — a
+  // hybrid of a mother's child and a normal enemy is still a dead end.
+  noReward:e.noReward||partner.noReward,
   hit:0,orbitHit:0,slow:0,burn:0,age:0,
   tell:0,charge:0,fire:random(.3,.9)
  };
