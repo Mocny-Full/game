@@ -3,7 +3,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#03060a">
 <title>VOID BLOOM: ECHOES</title>
 <style>
 :root{
@@ -19,7 +23,7 @@ body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;overflow:auto;background:#040914e8;backdrop-filter:blur(8px);touch-action:auto;z-index:5}
 #overlay.hidden{display:none}
-#rotateHint{position:fixed;top:0;left:0;right:0;padding:6px 10px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;z-index:20;display:none}
+#rotateHint{position:fixed;top:0;left:0;right:0;padding:calc(6px + env(safe-area-inset-top,0px)) 10px 6px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;z-index:20;display:none}
 @media(orientation:portrait) and (pointer:coarse){
  #rotateHint{display:block}
 }
@@ -30,7 +34,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #joyZone{position:fixed;pointer-events:auto;touch-action:none;
  left:var(--barL);top:calc(var(--stageTop) + var(--stageH) * .10);
  width:calc(var(--stageW) * .52);height:calc(var(--stageH) * .78)}
-#touch.bars #joyZone{left:0;top:var(--stageTop);width:var(--barL);height:var(--stageH)}
+#touch.bars #joyZone{
+ left:env(safe-area-inset-left,0px);top:var(--stageTop);
+ width:calc(var(--barL) - env(safe-area-inset-left,0px));height:var(--stageH)}
 #joyBase{position:fixed;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
 #joyBase.show{opacity:.9}
 #joyKnob{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
@@ -38,15 +44,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .tbtn:active{opacity:1;transform:scale(.94)}
 #btnDash{width:76px;height:76px;right:calc(var(--barR) + 104px);bottom:calc(var(--stageBottom) + 26px)}
 #btnPulse{width:76px;height:76px;right:calc(var(--barR) + 20px);bottom:calc(var(--stageBottom) + 26px);background:var(--gold)}
-#btnPause{width:42px;height:42px;right:calc(var(--barR) + 16px);top:calc(var(--stageTop) + 16px);background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
-#touch.bars #btnDash{right:calc((var(--barR) - 76px)/2);bottom:calc(var(--stageBottom) + 116px)}
-#touch.bars #btnPulse{right:calc((var(--barR) - 76px)/2);bottom:calc(var(--stageBottom) + 26px)}
-#touch.bars #btnPause{right:calc((var(--barR) - 42px)/2)}
+#btnPause{width:42px;height:42px;right:calc(var(--barR) + 16px);top:calc(var(--stageTop) + 16px + env(safe-area-inset-top,0px));background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
+#touch.bars #btnDash{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 116px)}
+#touch.bars #btnPulse{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 26px)}
+#touch.bars #btnPause{right:calc((var(--barR) - 42px)/2 + env(safe-area-inset-right,0px))}
+#touch.bars #joyZone{padding-left:env(safe-area-inset-left,0px)}
 @media(max-width:700px){
  #btnDash{width:62px;height:62px;right:calc(var(--barR) + 82px);bottom:calc(var(--stageBottom) + 14px)}
  #btnPulse{width:62px;height:62px;right:calc(var(--barR) + 14px);bottom:calc(var(--stageBottom) + 14px)}
- #touch.bars #btnDash{right:calc((var(--barR) - 62px)/2);bottom:calc(var(--stageBottom) + 86px)}
- #touch.bars #btnPulse{right:calc((var(--barR) - 62px)/2);bottom:calc(var(--stageBottom) + 14px)}
+ #touch.bars #btnDash{right:calc((var(--barR) - 62px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 86px)}
+ #touch.bars #btnPulse{right:calc((var(--barR) - 62px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 14px)}
 }
 .panel{width:min(1000px,100%);text-align:center}
 .eyebrow{color:var(--mint);font:700 12px monospace;letter-spacing:.2em}
@@ -147,6 +154,28 @@ const keys=new Set();
 
 const isTouch=matchMedia("(pointer:coarse)").matches;
 const touchUI=document.querySelector("#touch");
+
+// Ask for fullscreen on the first tap so the mobile browser's address bar
+// gets out of the way. Must run from a user gesture, so it's called from
+// invoke() rather than on load. Stops retrying once the player has
+// actually left fullscreen once, so it doesn't keep re-prompting after
+// they deliberately back out.
+let fsEntered=false,fsDeclined=false;
+function enterFullscreen(){
+ if(!isTouch||fsDeclined||document.fullscreenElement)return;
+ const el=document.documentElement;
+ const req=el.requestFullscreen||el.webkitRequestFullscreen;
+ if(req)req.call(el).catch(()=>{});
+}
+function onFullscreenChange(){
+ if(document.fullscreenElement||document.webkitFullscreenElement){
+  fsEntered=true;
+ }else if(fsEntered){
+  fsDeclined=true;
+ }
+}
+document.addEventListener("fullscreenchange",onFullscreenChange);
+document.addEventListener("webkitfullscreenchange",onFullscreenChange);
 const joyZone=document.querySelector("#joyZone");
 const joyBase=document.querySelector("#joyBase");
 const joyKnob=document.querySelector("#joyKnob");
@@ -579,6 +608,7 @@ function invoke(i){
  const fn=actions[i];
  if(typeof fn!=="function")return;
  wakeAudio();
+ enterFullscreen();
  sfx.click();
  actions=[];
  fn();
