@@ -1165,15 +1165,25 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
     }
    };
   }),
-  [{
-   title:`REROLL (${R.rerolls})`,
-   secondary:true,
-   disabled:R.rerolls<=0,
-   fn:()=>{
-    R.rerolls--;
-    mutationChoice(done,title);
+  [
+   {
+    title:`REROLL (${R.rerolls})`,
+    secondary:true,
+    disabled:R.rerolls<=0,
+    fn:()=>{
+     R.rerolls--;
+     mutationChoice(done,title);
+    }
+   },
+   {
+    // Without a way to decline, the 0-mutation ending is unreachable —
+    // levels (and thus mutation offers) happen automatically from combat
+    // XP, with no other way through a run.
+    title:"REFUSE",
+    secondary:true,
+    fn:done
    }
-  }]);
+  ]);
 }
 
 function levelCheck(done){
