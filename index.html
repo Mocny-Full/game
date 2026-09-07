@@ -31,24 +31,28 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
    the letterbox bars beside the stage instead of covering the play field. */
 #touch{position:fixed;inset:0;display:none;touch-action:none;z-index:4;pointer-events:none}
 #touch.active{display:block}
-#joyZone{position:fixed;pointer-events:auto;touch-action:none;
- left:var(--barL);top:calc(var(--stageTop) + var(--stageH) * .10);
- width:calc(var(--stageW) * .52);height:calc(var(--stageH) * .78)}
-#touch.bars #joyZone{
- left:env(safe-area-inset-left,0px);top:var(--stageTop);
- width:calc(var(--barL) - env(safe-area-inset-left,0px));height:var(--stageH)}
+/* The joystick can start from a touch anywhere on screen — it only ever
+   covers the play field's dead space anyway, and pinning it to the bar
+   turned out to be more of a hindrance than a help. Buttons sit later in
+   the DOM so they still intercept their own taps first. */
+#joyZone{position:fixed;inset:0;pointer-events:auto;touch-action:none}
 #joyBase{position:fixed;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
 #joyBase.show{opacity:.9}
 #joyKnob{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
-.tbtn{position:fixed;pointer-events:auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none}
+.tbtn{position:fixed;pointer-events:auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none;--ready:1}
 .tbtn:active{opacity:1;transform:scale(.94)}
+.tbtn.ready{box-shadow:0 0 14px 3px #ffffffb0}
+/* A conic-gradient "pie" overlay shows recharge progress directly on the
+   button instead of a separate HUD bar — the dark wedge shrinks to
+   nothing as --ready goes from 0 to 1. */
+.tbtn::before{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+ background:conic-gradient(transparent calc(var(--ready) * 360deg),#00000080 0)}
 #btnDash{width:76px;height:76px;right:calc(var(--barR) + 104px);bottom:calc(var(--stageBottom) + 26px)}
 #btnPulse{width:76px;height:76px;right:calc(var(--barR) + 20px);bottom:calc(var(--stageBottom) + 26px);background:var(--gold)}
 #btnPause{width:42px;height:42px;right:calc(var(--barR) + 16px);top:calc(var(--stageTop) + 16px + env(safe-area-inset-top,0px));background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
 #touch.bars #btnDash{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 116px)}
 #touch.bars #btnPulse{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 26px)}
 #touch.bars #btnPause{right:calc((var(--barR) - 42px)/2 + env(safe-area-inset-right,0px))}
-#touch.bars #joyZone{padding-left:env(safe-area-inset-left,0px)}
 @media(max-width:700px){
  #btnDash{width:62px;height:62px;right:calc(var(--barR) + 82px);bottom:calc(var(--stageBottom) + 14px)}
  #btnPulse{width:62px;height:62px;right:calc(var(--barR) + 14px);bottom:calc(var(--stageBottom) + 14px)}
@@ -775,7 +779,7 @@ function help(){
   [
    {title:"DASH",tag:isTouch?"BUTTON":"SPACE",desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",foot:"Cooldown: roughly 2.3–3.3 seconds."},
    {title:"PULSE",tag:isTouch?"BUTTON":"E",desc:"Clears bullets and damages nearby enemies.",foot:"Recharge is intentionally slow."},
-   {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, stars snipe, rings summon.",foot:"Health shards show remaining HP."},
+   {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, hexagons soak hits and lumber, stars snipe, rings summon.",foot:"Health shards show remaining HP."},
    {title:"PATH MAP",tag:"READ",desc:"The row above your choices previews the whole floor. Filled icons are rooms you've resolved; outlined icons are still open.",foot:"C combat · E elite · R rest · $ shop · ? unknown · G guardian"},
    {title:"THE REFLECTION",tag:"???",desc:"Something wearing your own silhouette occasionally crosses the field. It isn't your friend — but it isn't only your enemy either.",foot:"It doesn't stay long."}
   ],
@@ -1216,9 +1220,12 @@ function wave(){
  let count=13+room.wave*4+Math.floor(R.depth*.8);
  if(room.type==="elite")count+=9;
 
- let pool=["seeker","seeker","gunner"];
+ // Heavy, slow tanks lead the enemy roster; the ranged tri-shot gunner
+ // shows up later. Their arrival dilutes gunner's share of the pool, so
+ // the ranged threat naturally eases off right as tanks start soaking hits.
+ let pool=["seeker","seeker","seeker","tank"];
  if(R.depth>1)pool.push("charger");
- if(R.depth>3)pool.push("sniper","tank");
+ if(R.depth>3)pool.push("gunner","sniper");
  if(R.depth>7)pool.push("summoner");
 
  for(let i=0;i<count;i++){
@@ -2694,59 +2701,75 @@ drawPlayerShards();
   }
  }
 
+ drawUpgradeBar();
+
  if(P){
-  text(
-    isTouch?"DASH":"[SPACE] DASH",
-    24,
-    H-48,
-    12,
-    P.dashCD<=0?C.mint:C.muted
-  );
+  if(isTouch){
+   // The touch buttons show their own recharge state (a conic-gradient
+   // ring) instead of duplicating it in a separate canvas bar.
+   const dashReady=P.dashCD<=0;
+   const pulseReady=P.energy>=S.pulseCost;
 
-  bar(
-    24,
-    H-28,
-    195,
-    6,
-    1-P.dashCD/S.dashCD,
-    C.mint
-  );
+   btnDash.style.setProperty("--ready",dashReady?1:1-P.dashCD/S.dashCD);
+   btnDash.classList.toggle("ready",dashReady);
+   btnPulse.style.setProperty("--ready",Math.min(1,P.energy/S.pulseCost));
+   btnPulse.classList.toggle("ready",pulseReady);
+  }else{
+   text("[SPACE] DASH",24,H-48,12,P.dashCD<=0?C.mint:C.muted);
 
-  text(
-    P.dashCD<=0?"READY":P.dashCD.toFixed(1)+"s",
-    230,
-    H-26,
-    10,
-    C.mint
-  );
+   bar(24,H-28,195,6,1-P.dashCD/S.dashCD,C.mint);
 
-  text(
-    isTouch?"PULSE":"[E] PULSE",
-    330,
-    H-48,
-    12,
-    P.energy>=S.pulseCost?C.gold:C.muted
-  );
+   text(
+     P.dashCD<=0?"READY":P.dashCD.toFixed(1)+"s",
+     230,
+     H-26,
+     10,
+     C.mint
+   );
 
-  bar(
-    330,
-    H-28,
-    195,
-    6,
-    P.energy/S.pulseCost,
-    C.gold
-  );
+   text("[E] PULSE",330,H-48,12,P.energy>=S.pulseCost?C.gold:C.muted);
 
-  text(
-    P.energy>=S.pulseCost
-      ?"READY"
-      :Math.floor(P.energy/S.pulseCost*100)+"%",
-    535,
-    H-26,
-    10,
-    C.gold
-  );
+   bar(330,H-28,195,6,P.energy/S.pulseCost,C.gold);
 
+   text(
+     P.energy>=S.pulseCost
+       ?"READY"
+       :Math.floor(P.energy/S.pulseCost*100)+"%",
+     535,
+     H-26,
+     10,
+     C.gold
+   );
+  }
+ }
+}
+
+// A compact row of owned mutations/weapons and their current rank, along
+// the bottom HUD strip — a glance at your build without opening BUILD.
+function drawUpgradeBar(){
+ if(!R)return;
+
+ const owned=[
+  ...MUTATIONS.filter(m=>rank(m.id)>0).map(m=>({label:`${m.name.split(" ")[0]} ${rank(m.id)}`,color:C.mint})),
+  ...WEAPONS.filter(w=>weaponRank(w.id)>0).map(w=>({label:`${w.name.split(" ")[0]} ${weaponRank(w.id)}`,color:C.gold}))
+ ];
+
+ if(!owned.length)return;
+
+ ctx.font="600 11px monospace";
+
+ const gap=14,y=740,maxX=W-24;
+ let x=24,shown=0;
+
+ for(;shown<owned.length;shown++){
+  const w=ctx.measureText(owned[shown].label).width;
+  if(x+w>maxX-40)break;
+  text(owned[shown].label,x,y,11,owned[shown].color,"left");
+  x+=w+gap;
+ }
+
+ if(shown<owned.length){
+  text(`+${owned.length-shown}`,x,y,11,C.muted,"left");
  }
 }
 
