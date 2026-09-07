@@ -69,6 +69,7 @@ h1 span{color:var(--mint)}
 .card em{color:var(--mint);font:700 11px monospace;font-style:normal}
 .card h3{margin:13px 0 8px;font-size:18px}
 .card p{margin:0;color:#acbdce;font-size:13px;line-height:1.5}
+.card p.lore{margin-top:9px;font-style:italic;opacity:.72}
 .card small{display:block;color:var(--gold);margin-top:13px;font-size:11px}
 .buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px}
 .button{padding:12px 21px;border:1px solid var(--mint);background:var(--mint);color:#08251e;font:800 12px monospace}
@@ -115,6 +116,7 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
  .card em{font-size:8px}
  .card h3{font-size:11px;margin:3px 0 2px}
  .card p{font-size:9px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .card p.lore{display:none}
  .card small{font-size:8px;margin-top:3px}
  .buttons{margin-top:6px;gap:6px}
  .button{padding:5px 10px;font-size:9px}
@@ -483,26 +485,116 @@ const FRAMES=[
   desc:"Slow, durable, and heavy-hitting."}
 ];
 
-const MUTATIONS=[
- ["power","Razor Petals",5,"+24% weapon damage.","WEAPON"],
- ["rate","Quickening",5,"Fire 16% faster.","WEAPON"],
- ["spread","Forked Bloom",3,"Add one projectile per rank.","WEAPON"],
- ["pierce","Needlework",3,"Projectiles pierce more enemies.","WEAPON"],
- ["speed","Wild Current",3,"+12% movement speed.","MOBILITY"],
- ["dash","Slipstream",4,"Dash cooldown reduced by 10%.","DASH"],
- ["wake","Afterimage",3,"Dash leaves damaging blooms.","DASH"],
- ["armor","Living Armor",4,"+1 maximum HP and repair 2.","SURVIVAL"],
- ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE"],
- ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE"],
- ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL"],
- ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL"]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4]}));
+// Two lore lines per mutation: an "early" voice (still mostly the player's
+// own) and a "late" voice (once MUTATION_DEEP_THRESHOLD or more mutations
+// have been accepted this run) that drifts toward the garden's own idiom.
+// Plot stays incidental — nothing here ever states the premise outright.
+const MUTATION_DEEP_THRESHOLD=4;
 
+const MUTATIONS=[
+ ["power","Razor Petals",5,"+24% weapon damage.","WEAPON",
+  "The petals cut cleaner every time you let them. You almost feel it deciding for you.",
+  "You no longer ask what the blade wants. It already knew what you'd swing at."],
+ ["rate","Quickening",5,"Fire 16% faster.","WEAPON",
+  "Your hands move faster than your thoughts arrive. That used to bother you.",
+  "There's no lag between wanting and doing anymore. There's barely a you in between."],
+ ["spread","Forked Bloom",3,"Add one projectile per rank.","WEAPON",
+  "One shot becomes two. The garden likes symmetry. It's teaching you to like it too.",
+  "Everything you make branches now, the way roots branch, the way you branch."],
+ ["pierce","Needlework",3,"Projectiles pierce more enemies.","WEAPON",
+  "The thorn goes all the way through. It never used to. Neither did you, once.",
+  "Nothing stops at one anymore. Not the needle. Not you."],
+ ["speed","Wild Current",3,"+12% movement speed.","MOBILITY",
+  "The current is faster than your legs remember being. It isn't unpleasant.",
+  "You've stopped noticing where your feet decide to go without you."],
+ ["dash","Slipstream",4,"Dash cooldown reduced by 10%.","DASH",
+  "The gap between one place and the next keeps shrinking. Convenient. Slightly wrong.",
+  "Distance is a suggestion the garden no longer bothers making to you."],
+ ["wake","Afterimage",3,"Dash leaves damaging blooms.","DASH",
+  "You leave more of yourself behind with every step now. Something grows where you were.",
+  "The trail you leave is more you than you are. It's doing fine without the rest of you."],
+ ["armor","Living Armor",4,"+1 maximum HP and repair 2.","SURVIVAL",
+  "The garden mends you before you finish flinching. You didn't ask it to.",
+  "It isn't healing anymore. It's just deciding you were never hurt."],
+ ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE",
+  "Something in your chest learned to push back. It wasn't there before you arrived.",
+  "The pulse doesn't come from you. You just happen to be where it comes out."],
+ ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE",
+  "You feel steadier in the light here. You didn't used to need to.",
+  "You've stopped telling the difference between resting and rooting."],
+ ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL",
+  "Something in your bite runs cold now. You don't remember choosing that.",
+  "You slow everything you touch. The garden calls this mercy."],
+ ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL",
+  "A small fire follows your aim now, patient, like it's been waiting for permission.",
+  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6]}));
+
+// Weapons are the player's own — not the garden's to give. They're always
+// bought back with scrap, never handed over for free, and their lore stays
+// one consistent, personal voice rather than drifting like mutations do.
 const WEAPONS=[
- ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL"],
- ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM"],
- ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC"]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4]}));
+ ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL",
+  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly."],
+ ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM",
+  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it."],
+ ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC",
+  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5]}));
+
+// Notes are physical scraps of memory belonging to the garden's other
+// inhabitants — sometimes the player's own life before arriving, sometimes
+// an earlier attempt at leaving, sometimes someone else's entirely. Older
+// notes (deeper acts) decay into near-incoherence. Never confirms which is
+// which — that's the point.
+const NOTES=[
+ [
+  "I left the kettle on. That's the last thing I remember thinking. Not goodbye. A kettle.",
+  "There was a dog. I think there was a dog. I can still feel where it used to sit.",
+  "Rain on a window I can't place anymore. I know it mattered.",
+  "My hands used to smell like something. Bread, maybe. I miss having a smell that was mine.",
+  "I keep trying to remember a name that isn't 'you.' I had one."
+ ],
+ [
+  "The paths were different yesterday. I'm starting to think they're never the same twice, and I only just noticed.",
+  "It doesn't ask. It just makes room for you, the way water makes room for a stone.",
+  "I counted the flowers. Tomorrow there will be a different number, and I will have always known it.",
+  "Something in me agreed to this. I don't remember agreeing. I remember agreeing.",
+  "The hunger isn't mine anymore. It has better manners now."
+ ],
+ [
+  "Someone wrote this before me, I think. The handwriting keeps almost matching mine.",
+  "I found my own boot print going the wrong way. I don't remember walking back.",
+  "There is a version of this note where I warn you. I must have used it already.",
+  "We are not the first plant here. We are not even the first version of this plant.",
+  "If this feels familiar, it should. You may have written it."
+ ],
+ [
+  "the shape is kind it is kind it is",
+  "no door was ever a door it was always a wall being polite",
+  "i i i—the garden counts better than i i i",
+  "sleep well the roots say sleep well sleep the roots",
+  "not lost. arranged. not lost. arranged. not"
+ ]
+];
+
+// A brief on-canvas flash, not always shown, right at the moment of death —
+// first-person, uncertain, never explaining itself.
+const DEATH_ECHOES=[
+ "You have done this before.",
+ "The garden forgives you. It always does.",
+ "Was there a door, once?",
+ "Not your first bloom.",
+ "The shape remembers you better than you remember it.",
+ "Rest. You are almost correct.",
+ "Your name was—",
+ "It isn't cruelty. It never was.",
+ "The walls were always this close.",
+ "You keep coming back wrong.",
+ "Something outside is waiting. You think.",
+ "How many times, now?",
+ "You were someone, before the roots."
+];
 
 const META_UPGRADES=[
  ["vitality","Deep Roots",5,"+1 starting max HP per rank.",60],
@@ -585,6 +677,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
    <em>${i+1} / ${esc(a.tag||"CHOICE")}</em>
    <h3>${esc(a.title)}</h3>
    <p>${esc(a.desc||"")}</p>
+   ${a.lore?`<p class="lore">${esc(a.lore)}</p>`:""}
    ${a.foot?`<small>${esc(a.foot)}</small>`:""}
   </button>`;
  }).join("");
@@ -706,7 +799,8 @@ function begin(frame){
   hp:0,
   mods:{},weapons:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
   rerolls:2+metaRank("memory"),
-  lastReflectionDepth:-99
+  lastReflectionDepth:-99,
+  mutationPicks:0
  };
  calculate();
  R.hp=S.maxHp;
@@ -824,7 +918,7 @@ function unknownEvent(){
   sfx.hit();
 
   if(R.hp<=0){
-   finish(false);
+   beginDeath();
    return;
   }
 
@@ -838,7 +932,7 @@ function unknownEvent(){
   sfx.hit();
 
   if(R.hp<=0){
-   finish(false);
+   beginDeath();
    return;
   }
 
@@ -897,83 +991,147 @@ function build(){
   `<div>${owned.map(x=>`<span class="badge">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":"No mutations yet.")}</div>`);
 }
 
+function pickNote(){
+ const tier=NOTES[Math.min(3,Math.floor(R.depth/7))];
+ return choose(tier);
+}
+
 function shop(){
  if(!shopStock){
-  const pool=MUTATIONS.filter(x=>rank(x.id)<x.max);
-  shopStock={mutation:pool.length?choose(pool).id:null};
+  const mpool=MUTATIONS.filter(x=>rank(x.id)<x.max);
+  const wpool=WEAPONS.filter(x=>weaponRank(x.id)<x.max);
+
+  shopStock={
+   mutation:mpool.length?choose(mpool).id:null,
+   // Weapons and notes are scarce finds, not guaranteed stock like the
+   // mutation offer — most shop visits won't have either.
+   weapon:(wpool.length&&Math.random()<.45)?choose(wpool).id:null,
+   note:Math.random()<.4?pickNote():null
+  };
  }
 
  const repairCost=Math.ceil((S.maxHp-R.hp)*12);
  const rerollCost=30;
+ const noteCost=18;
  const mut=shopStock.mutation?MUTATIONS.find(m=>m.id===shopStock.mutation):null;
  const mutCost=mut?25+rank(mut.id)*25:0;
+ const wep=shopStock.weapon?WEAPONS.find(w=>w.id===shopStock.weapon):null;
+ const wepRank=wep?weaponRank(wep.id):0;
+ const wepCost=wep?35+wepRank*35:0;
+
+ const cards=[
+  {
+   title:"FULL REPAIR",
+   tag:`${repairCost} SCRAP`,
+   desc:"Restore integrity to maximum.",
+   foot:`${R.hp}/${S.maxHp} HP`,
+   disabled:R.hp>=S.maxHp||R.scrap<repairCost,
+   fn:()=>{
+    R.scrap-=repairCost;
+    heal(S.maxHp);
+    sfx.purchase();
+    shop();
+   }
+  },
+  {
+   title:"REROLL TOKEN",
+   tag:`${rerollCost} SCRAP`,
+   desc:"Gain one extra mutation reroll.",
+   foot:`${R.rerolls} REROLLS HELD`,
+   disabled:R.scrap<rerollCost,
+   fn:()=>{
+    R.scrap-=rerollCost;
+    R.rerolls++;
+    sfx.purchase();
+    shop();
+   }
+  },
+  mut?{
+   title:mut.name,
+   tag:`${mutCost} SCRAP`,
+   desc:mut.desc,
+   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?mut.loreLate:mut.loreEarly,
+   foot:`RANK ${rank(mut.id)+1}/${mut.max}`,
+   disabled:R.scrap<mutCost,
+   fn:()=>{
+    R.scrap-=mutCost;
+    R.mods[mut.id]=rank(mut.id)+1;
+    R.mutationPicks++;
+    calculate();
+    if(mut.id==="armor")heal(2);
+    const remaining=MUTATIONS.filter(x=>rank(x.id)<x.max);
+    shopStock.mutation=remaining.length?choose(remaining).id:null;
+    sfx.purchase();
+    shop();
+   }
+  }:{
+   title:"SOLD OUT",
+   tag:"—",
+   desc:"Every mutation has already reached maximum rank.",
+   disabled:true
+  }
+ ];
+
+ // Weapons are the player's own — reclaimed, never granted, always at a
+ // price. Unlike the mutation slot, this one isn't always stocked.
+ if(wep){
+  cards.push({
+   title:wep.name,
+   tag:wepRank===0?`${wepCost} SCRAP · NEW`:`${wepCost} SCRAP`,
+   desc:wep.desc,
+   lore:wep.lore,
+   foot:`RANK ${wepRank+1}/${wep.max}`,
+   disabled:R.scrap<wepCost,
+   fn:()=>{
+    R.scrap-=wepCost;
+    R.weapons[wep.id]=wepRank+1;
+    calculate();
+    const remaining=WEAPONS.filter(x=>weaponRank(x.id)<x.max);
+    shopStock.weapon=remaining.length?choose(remaining).id:null;
+    sfx.purchase();
+    shop();
+   }
+  });
+ }
+
+ if(shopStock.note){
+  cards.push({
+   title:"WEATHERED NOTE",
+   tag:`${noteCost} SCRAP`,
+   desc:"Someone left this behind. Reading it won't help you fight.",
+   foot:"???",
+   disabled:R.scrap<noteCost,
+   fn:()=>{
+    R.scrap-=noteCost;
+    const text=shopStock.note;
+    shopStock.note=null;
+    sfx.purchase();
+    show("A WEATHERED <span>NOTE</span>",
+     text,
+     [],
+     [{title:"CONTINUE",fn:shop}]);
+   }
+  });
+ }
 
  show("SUPPLY <span>CACHE</span>",
   `Trade scrap for guaranteed upgrades. Everything here is permanent, but it costs what fighting would have earned instead.`,
-  [
-   {
-    title:"FULL REPAIR",
-    tag:`${repairCost} SCRAP`,
-    desc:"Restore integrity to maximum.",
-    foot:`${R.hp}/${S.maxHp} HP`,
-    disabled:R.hp>=S.maxHp||R.scrap<repairCost,
-    fn:()=>{
-     R.scrap-=repairCost;
-     heal(S.maxHp);
-     sfx.purchase();
-     shop();
-    }
-   },
-   {
-    title:"REROLL TOKEN",
-    tag:`${rerollCost} SCRAP`,
-    desc:"Gain one extra mutation reroll.",
-    foot:`${R.rerolls} REROLLS HELD`,
-    disabled:R.scrap<rerollCost,
-    fn:()=>{
-     R.scrap-=rerollCost;
-     R.rerolls++;
-     sfx.purchase();
-     shop();
-    }
-   },
-   mut?{
-    title:mut.name,
-    tag:`${mutCost} SCRAP`,
-    desc:mut.desc,
-    foot:`RANK ${rank(mut.id)+1}/${mut.max}`,
-    disabled:R.scrap<mutCost,
-    fn:()=>{
-     R.scrap-=mutCost;
-     R.mods[mut.id]=rank(mut.id)+1;
-     calculate();
-     if(mut.id==="armor")heal(2);
-     const remaining=MUTATIONS.filter(x=>rank(x.id)<x.max);
-     shopStock.mutation=remaining.length?choose(remaining).id:null;
-     sfx.purchase();
-     shop();
-    }
-   }:{
-    title:"SOLD OUT",
-    tag:"—",
-    desc:"Every mutation has already reached maximum rank.",
-    disabled:true
-   }
-  ],
+  cards,
   [{title:"LEAVE",secondary:true,fn:route}],
   `<div class="small">SCRAP ${R.scrap}</div>`);
 }
 
 function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"){
- const mutationPool=MUTATIONS.filter(x=>rank(x.id)<x.max).map(x=>({...x,kind:"mutation"}));
- const weaponPool=WEAPONS.filter(x=>weaponRank(x.id)<x.max).map(x=>({...x,kind:"weapon"}));
- const pool=shuffle([...mutationPool,...weaponPool]).slice(0,3);
+ // Weapons are never offered here — they're the player's own pieces, only
+ // ever reclaimed with scrap in the shop. This screen is purely the
+ // garden's gifts.
+ const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3);
 
  if(!pool.length){
   heal(2);
   sfx.levelUp();
   show("FULLY <span>BLOOMED</span>",
-   "Every mutation and weapon has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+   "Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
    [],
    [{title:"CONTINUE",fn:done}]);
   return;
@@ -983,20 +1141,18 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
  show(title,
   "Read the cards. Your build is the main source of power.",
   pool.map(m=>{
-   const current=m.kind==="weapon"?weaponRank(m.id):rank(m.id);
+   const current=rank(m.id);
 
    return {
     title:m.name,
-    tag:m.kind==="weapon"&&current===0?"NEW WEAPON":m.tag,
+    tag:m.tag,
     desc:m.desc,
+    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?m.loreLate:m.loreEarly,
     foot:`RANK ${current+1}/${m.max}`,
     fn:()=>{
-     if(m.kind==="weapon"){
-      R.weapons[m.id]=current+1;
-     }else{
-      R.mods[m.id]=current+1;
-      if(m.id==="armor")heal(2);
-     }
+     R.mods[m.id]=current+1;
+     R.mutationPicks++;
+     if(m.id==="armor")heal(2);
      calculate();
      done();
     }
@@ -1421,7 +1577,22 @@ function hurt(){
  shake=8;
  sfx.hit();
 
- if(R.hp<=0)finish(false);
+ if(R.hp<=0)beginDeath();
+}
+
+// A brief on-canvas flash at the moment of death, before the game-over
+// screen — not always shown, first-person, never explaining itself.
+function beginDeath(){
+ if(state==="dying")return;
+ state="dying";
+
+ if(Math.random()<.7){
+  label(600,340,choose(DEATH_ECHOES),C.spectral,1.6);
+ }
+
+ setTimeout(()=>{
+  if(state==="dying")finish(false);
+ },900);
 }
 
 function spawnBoss(){
@@ -1470,7 +1641,7 @@ function spawnReflectionFinal(){
  enemies.push(boss);
  sfx.reflectionAppear();
  sfx.bossSpawn();
- label(600,175,"THE GARDEN SHOWS ITS TRUE FACE",C.spectral,2.4);
+ label(600,175,"IT HAS SEEN ENOUGH",C.spectral,2.4);
  return boss;
 }
 
@@ -1988,6 +2159,15 @@ function completeRoom(){
  }
 }
 
+// Three victory texts off how many mutations were accepted this run
+// (weapons never count — see MUTATIONS/WEAPONS above). Same trigger, same
+// mechanical win, three very different outcomes.
+const ENDING_TIERS=[
+ {max:0,title:"THE SLEEPER <span>WAKES</span>",sub:"Nothing was left to hold your place. The garden opens its eyes for the first time in a very long while — and finds itself alone."},
+ {max:3,title:"YOU <span>LEAVE</span>",sub:"The gate remembers you enough to let you through. The world outside is loud, and fast, and none of it makes sense anymore. You'll learn. Probably."},
+ {max:Infinity,title:"THE GARDEN <span>KEEPS</span> YOU",sub:"You beat your reflection. It doesn't matter. There was never enough of you left to walk through a door."}
+];
+
 function finish(win){
  meta.best=Math.max(meta.best,R.score);
  if(win)meta.wins++;
@@ -1999,9 +2179,12 @@ function finish(win){
  stopAmbient();
  win?sfx.victory():sfx.death();
 
+ const picks=R.mutationPicks||0;
+ const ending=win?ENDING_TIERS.find(t=>picks<=t.max):null;
+
  show(
-  win?"THE GARDEN <span>BREAKS</span>":"THE GARDEN <span>RECLAIMS YOU</span>",
-  win?"You survived what was supposed to be impossible.":"The expedition ends. Your memories remain.",
+  win?ending.title:"THE GARDEN <span>RECLAIMS YOU</span>",
+  win?ending.sub:"The expedition ends. Your memories remain.",
   [],
   [
    {title:"NEW EXPEDITION",fn:frameSelect},
@@ -2011,6 +2194,7 @@ function finish(win){
    <div><b>${R.score.toLocaleString()}</b><small>SCORE</small></div>
    <div><b>${R.kills}</b><small>KILLS</small></div>
    <div><b>${R.depth}</b><small>ROOMS</small></div>
+   <div><b>${picks}</b><small>MUTATIONS</small></div>
    <div><b>+${sporesEarned}</b><small>SPORES</small></div>
   </div>`
  );
@@ -2723,6 +2907,8 @@ addEventListener("keydown",e=>{
   if(k===" ")dash();
   if(k==="e")pulse();
   if(k==="p"||k==="escape")pause();
+ }else if(state==="dying"){
+  // Let the death flash play out — no menu escape mid-echo.
  }else if(/^[1-9]$/.test(k)){
   invoke(Number(k)-1);
  }else if(k==="escape"){
