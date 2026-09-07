@@ -205,7 +205,14 @@ const touchUI=document.querySelector("#touch");
 const hasFullscreenAPI=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
 const isStandalone=navigator.standalone===true||matchMedia("(display-mode: standalone)").matches;
 function enterFullscreen(){
- if(!isTouch||document.fullscreenElement)return;
+ // Must check both the standard and the webkit-prefixed property — some
+ // Android browsers/WebViews only ever populate webkitFullscreenElement,
+ // never the unprefixed one. Checking only fullscreenElement there means
+ // this always thinks it's not fullscreen, even while it already is, and
+ // calls webkitRequestFullscreen() again on every single menu tap. Calling
+ // it while already (webkit-)fullscreen is what actually froze the page —
+ // not a lag, a wedged renderer requiring a reload.
+ if(!isTouch||document.fullscreenElement||document.webkitFullscreenElement)return;
  const el=document.documentElement;
  const req=el.requestFullscreen||el.webkitRequestFullscreen;
  if(req)req.call(el).catch(()=>{});
