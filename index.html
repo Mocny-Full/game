@@ -3540,17 +3540,30 @@ function pulse(){
  label(P.x,P.y-45,t("pulse_label"),C.gold,.8);
 }
 
+// pause() is the guarded entry point (only takes effect while actually
+// playing, so a stray P keypress or the pause button can't fire it twice).
+// renderPause() is the actual screen and is what the sound toggle below
+// calls to refresh itself — it used to call pause() again, but by the time
+// that runs state is already "menu" (show() set it), so the guard silently
+// swallowed the re-render: no new show() call, and invoke() had already
+// cleared actions[] before running this handler, so every button on the
+// still-displayed pause screen — including the ones the player could see —
+// stopped responding to clicks entirely. That's the "game lags/freezes
+// when I toggle sound from pause" report on both Android and desktop.
 function pause(){
  if(state!=="playing")return;
-
  sfx.pause();
+ renderPause();
+}
+
+function renderPause(){
  show(t("take_root_title"),
   t("take_root_sub"),
   [],
   [
    {title:t("resume"),fn:hide},
    {title:t("build_btn"),secondary:true,fn:build},
-   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();pause();}},
+   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();renderPause();}},
    {title:t("abandon"),secondary:true,fn:()=>finish(false)}
   ]);
 }
