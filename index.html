@@ -2264,6 +2264,8 @@ function updateReflection(e,dt){
  }
 }
 
+const TANK_BOMB_TIME=1.5;
+
 function explodeTank(e){
  const blastR=e.r+60;
 
@@ -2323,15 +2325,15 @@ function updateEnemy(e,dt){
   }
  }
 
- // Tanks are slow but punish camping next to them: 3 continuous seconds
- // inside the danger zone triggers a self-destructing blast.
+ // Tanks are slow but punish camping next to them: a short continuous
+ // stretch inside the danger zone triggers a self-destructing blast.
  if(e.type==="tank"){
   const dangerZone=e.r+60;
 
   if(distance(e,P)<dangerZone){
    e.bombTimer=(e.bombTimer||0)+dt;
 
-   if(e.bombTimer>=3){
+   if(e.bombTimer>=TANK_BOMB_TIME){
     explodeTank(e);
     return;
    }
@@ -2591,7 +2593,7 @@ function drawBombTelegraphs(){
  for(const e of enemies){
   if(e.dead||e.type!=="tank"||!e.bombTimer)continue;
 
-  const progress=Math.min(1,e.bombTimer/3);
+  const progress=Math.min(1,e.bombTimer/TANK_BOMB_TIME);
   const dangerZone=e.r+60;
 
   ctx.save();
