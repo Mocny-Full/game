@@ -272,6 +272,8 @@ const sfx={
  lance(){tone(500,.14,"sawtooth",.12,900)},
  chain(){tone(700,.05,"square",.08,1400)},
  wave(){tone(220,.1,"sawtooth",.1,140)},
+ bossAttack(){tone(150,.2,"sawtooth",.16,50)},
+ bossDefeat(){tone(120,.9,"sawtooth",.3,25);tone(300,.5,"triangle",.2,null,.25);tone(500,.7,"triangle",.22,null,.5)},
  levelUp(){tone(523,.12,"sine",.16);tone(659,.12,"sine",.16,null,.09);tone(784,.22,"sine",.2,null,.18)},
  roomClear(){tone(392,.15,"triangle",.18);tone(523,.15,"triangle",.18,null,.12);tone(659,.25,"triangle",.22,null,.24)},
  victory(){tone(392,.16,"triangle",.2);tone(523,.16,"triangle",.2,null,.13);tone(659,.16,"triangle",.2,null,.26);tone(784,.4,"triangle",.25,null,.39)},
@@ -418,6 +420,18 @@ const BIOMES=[
  {name:"CINDER ENGINE",color:C.gold,bg:"#2d2018"},
  {name:"EVENT HORIZON",color:C.blue,bg:"#102334"}
 ];
+
+const BOSSES=[
+ {name:"BLOOMSHEAR",color:C.mint},
+ {name:"THE REFLECTION",color:C.violet},
+ {name:"FURNACE CORE",color:C.gold},
+ {name:"THE OCCULTATION",color:C.blue}
+];
+
+function bossDepthAhead(){
+ const next=R.depth+1;
+ return next%7===0&&next<=28;
+}
 
 function rank(id){return R?.mods?.[id]||0}
 function weaponRank(id){return R?.weapons?.[id]||0}
@@ -596,15 +610,21 @@ function route(){
  shopStock=null;
 
  const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
+ const boss=bossDepthAhead()?BOSSES[Math.floor(R.depth/7)]:null;
+
+ const cards=boss?[
+  {title:"BOSS",tag:"GUARDIAN",desc:`${boss.name} blocks the way into the next biome.`,fn:()=>enter("boss")},
+  {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
+ ]:[
+  {title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
+  {title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
+  {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
+  {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
+ ];
 
  show(`${biome.name.split(" ")[0]} <span>${biome.name.split(" ").slice(1).join(" ")}</span>`,
-  "Choose the next pressure test. Standard rooms contain five waves. Elite rooms contain six.",
-  [
-   {title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
-   {title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
-   {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
-   {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
-  ],
+  boss?"A guardian stands between you and the next biome. There is no way around it.":"Choose the next pressure test. Standard rooms contain five waves. Elite rooms contain six.",
+  cards,
   [
    {title:"BUILD",secondary:true,fn:build},
    {title:"TITLE",secondary:true,fn:title}
@@ -631,7 +651,8 @@ function enter(type){
   pending:[],
   kills:0,
   target:endless?100+Math.floor((R.depth-27)*30):0,
-  clear:0
+  clear:0,
+  bossSpawned:false
  };
 
  startCombat();
@@ -1115,6 +1136,22 @@ function damageEnemy(e,damage){
  if(e.hp>0)return;
 
  e.dead=true;
+
+ if(e.type==="boss"){
+  R.kills++;
+  room.kills++;
+  R.score+=2000;
+  R.scrap+=150;
+  orbs.push({x:e.x,y:e.y,value:40});
+
+  sfx.bossDefeat();
+  burst(e.x,e.y,e.color,60,320);
+  ring(e.x,e.y,e.color,140,.6);
+  shake=14;
+  label(e.x,e.y-60,"GUARDIAN FELLED",e.color,1.8);
+  return;
+ }
+
  R.kills++;
  room.kills++;
  R.score+=e.elite?160:85;
@@ -1142,8 +1179,106 @@ function hurt(){
  if(R.hp<=0)finish(false);
 }
 
+function spawnBoss(){
+ const def=BOSSES[Math.min(3,Math.floor(R.depth/7))];
+ const hpScale=1+R.depth*.1;
+
+ const boss={
+  type:"boss",shape:"boss",
+  name:def.name,color:def.color,
+  x:600,y:230,r:46,
+  hp:850*hpScale,maxHp:850*hpScale,
+  elite:true,born:1.2,dead:false,id:Math.random(),
+  age:0,slow:0,burn:0,hit:0,orbitHit:0,
+  tell:0,aim:0,
+  attackIndex:0,attackTimer:2.5,
+  chargeState:0,chargeAim:0,chargeTimer:0
+ };
+
+ enemies.push(boss);
+ return boss;
+}
+
+function runBossAttack(e){
+ e.attackIndex=(e.attackIndex+1)%3;
+
+ if(e.attackIndex===0){
+  const hpFrac=e.hp/e.maxHp;
+  const count=10+Math.floor((1-hpFrac)*8);
+
+  for(let i=0;i<count;i++){
+   bullet(e.x,e.y,i*TAU/count,240,false,1);
+  }
+ }else if(e.attackIndex===1){
+  e.chargeAim=angle(e,P);
+  e.chargeState=1;
+  e.chargeTimer=.5;
+ }else{
+  for(let i=0;i<3;i++){
+   spawn(choose(["seeker","gunner"]));
+  }
+ }
+
+ sfx.bossAttack();
+}
+
+function updateBoss(e,dt){
+ if(e.born>0){
+  e.born-=dt;
+  return;
+ }
+
+ e.age+=dt;
+ e.hit=Math.max(0,e.hit-dt);
+
+ const hpFrac=e.hp/e.maxHp;
+ const cycle=hpFrac<.33?1.6:hpFrac<.66?2.1:2.6;
+
+ if(e.chargeState===1){
+  e.x+=Math.cos(e.chargeAim)*680*dt;
+  e.y+=Math.sin(e.chargeAim)*680*dt;
+  e.chargeTimer-=dt;
+  if(e.chargeTimer<=0)e.chargeState=0;
+ }else if(e.tell>0){
+  e.tell-=dt;
+  if(e.tell<=0)runBossAttack(e);
+ }else{
+  const a=angle(e,P);
+  const n=distance(e,P);
+  const speed=n>300?60:0;
+  e.x+=Math.cos(a)*speed*dt;
+  e.y+=Math.sin(a)*speed*dt;
+
+  e.attackTimer-=dt;
+  if(e.attackTimer<=0){
+   e.tell=.9;
+   e.aim=angle(e,P);
+   e.attackTimer=cycle;
+  }
+ }
+
+ e.x=clamp(e.x,e.r+10,W-e.r-10);
+ e.y=clamp(e.y,TOP+e.r,BOTTOM-e.r-10);
+
+ if(distance(e,P)<e.r+P.r){
+  if(P.dash>0){
+   if(!P.hits.has(e.id)){
+    P.hits.add(e.id);
+    damageEnemy(e,S.dashDamage);
+   }
+  }else{
+   hurt();
+  }
+ }
+}
+
 function updateEnemy(e,dt){
  if(e.dead)return;
+
+ if(e.type==="boss"){
+  updateBoss(e,dt);
+  return;
+ }
 
  if(e.born>0){
   e.born-=dt;
@@ -1293,7 +1428,7 @@ function update(dt){
  if(!P)return;
  updatePlayer(dt);
 
- if(room.time>4&&hazards.filter(h=>h.type==="slow").length<2){
+ if(room.type!=="boss"&&room.time>4&&hazards.filter(h=>h.type==="slow").length<2){
   makeHazard();
  }
 
@@ -1307,6 +1442,11 @@ function update(dt){
   ){
    wave();
    room.wait=1.1;
+  }
+ }else if(room.type==="boss"){
+  if(!room.bossSpawned){
+   spawnBoss();
+   room.bossSpawned=true;
   }
  }else if(!room.pending.length&&!enemies.some(e=>!e.dead)){
   room.wait-=dt;
@@ -1366,6 +1506,8 @@ function update(dt){
 
  const complete=room.type==="endless"
   ?room.kills>=room.target&&!room.pending.length&&!enemies.length
+  :room.type==="boss"
+  ?room.bossSpawned&&!enemies.some(e=>e.type==="boss"&&!e.dead)
   :room.wave>=room.maxWaves&&!room.pending.length&&!enemies.length;
 
  if(complete){
@@ -1384,9 +1526,11 @@ function update(dt){
 }
 
 function completeRoom(){
+ const wasBoss=room.type==="boss";
+
  R.depth++;
- R.score+=room.type==="elite"?900:450;
- R.scrap+=room.type==="elite"?50:25;
+ R.score+=room.type==="elite"?900:wasBoss?1500:450;
+ R.scrap+=room.type==="elite"?50:wasBoss?100:25;
  sfx.roomClear();
 
  room=null;
@@ -1396,7 +1540,11 @@ function completeRoom(){
  hazards=[];
  orbs=[];
 
- route();
+ if(wasBoss){
+  mutationChoice(route,"GUARDIAN FELLED — CHOOSE A <span>REWARD</span>");
+ }else{
+  route();
+ }
 }
 
 function finish(win){
@@ -1610,8 +1758,34 @@ function drawHazards(){
   ctx.globalAlpha=1;
 }
 
+function drawBoss(e){
+  if(e.born>0){
+    ctx.globalAlpha=.65;
+    circle(e.x,e.y,e.r+e.born*40,e.color,3);
+    ctx.globalAlpha=1;
+    return;
+  }
+
+  if(e.tell>0||e.chargeState===1){
+    ctx.save();
+    ctx.globalAlpha=.6;
+    ctx.setLineDash([8,9]);
+    circle(e.x,e.y,e.r+26,e.color,3);
+    ctx.restore();
+  }
+
+  const fill=e.hit>0?C.white:"#1a1030";
+  polygon(e.x,e.y,e.r,7,e.age*.3,fill,e.color,5);
+  text(e.name,e.x,e.y-e.r-22,13,e.color,"center");
+}
+
 function drawEnemy(e){
   if(e.dead)return;
+
+  if(e.type==="boss"){
+    drawBoss(e);
+    return;
+  }
 
   if(e.born>0){
     ctx.globalAlpha=.65;
@@ -1835,9 +2009,20 @@ drawPlayerShards();
  if(room){
   const objective=room.type==="endless"
    ?`ENDLESS ${room.kills}/${room.target}`
+   :room.type==="boss"
+   ?"GUARDIAN"
    :`WAVE ${room.wave}/${room.maxWaves}`;
 
   text(objective,W-24,55,11,C.pink,"right");
+ }
+
+ if(room&&room.type==="boss"){
+  const boss=enemies.find(e=>e.type==="boss");
+
+  if(boss){
+   text(boss.name,600,90,13,boss.color,"center");
+   bar(350,98,500,8,boss.hp/boss.maxHp,boss.color);
+  }
  }
 
  if(P){
