@@ -9,7 +9,8 @@
 :root{
   color-scheme:dark;
   --mint:#71ffd0;--gold:#ffcf78;--pink:#ff7197;
-  --blue:#79ceff;--violet:#bda2ff;--ink:#e8f4ff;--muted:#96aabd
+  --blue:#79ceff;--violet:#bda2ff;--ink:#e8f4ff;--muted:#96aabd;
+  --barL:0px;--barR:0px;--stageTop:0px;--stageBottom:0px;--stageW:100vw;--stageH:100dvh
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#03060a;color:var(--ink);font-family:system-ui,sans-serif}
@@ -22,20 +23,30 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 @media(orientation:portrait) and (pointer:coarse){
  #rotateHint{display:block}
 }
-#touch{position:absolute;inset:0;display:none;touch-action:none;z-index:4}
+/* #touch spans the full viewport (not just #stage) so controls can live in
+   the letterbox bars beside the stage instead of covering the play field. */
+#touch{position:fixed;inset:0;display:none;touch-action:none;z-index:4;pointer-events:none}
 #touch.active{display:block}
-#joyZone{position:absolute;left:0;top:10%;width:52%;height:78%;touch-action:none}
-#joyBase{position:absolute;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
+#joyZone{position:fixed;pointer-events:auto;touch-action:none;
+ left:var(--barL);top:calc(var(--stageTop) + var(--stageH) * .10);
+ width:calc(var(--stageW) * .52);height:calc(var(--stageH) * .78)}
+#touch.bars #joyZone{left:0;top:var(--stageTop);width:var(--barL);height:var(--stageH)}
+#joyBase{position:fixed;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
 #joyBase.show{opacity:.9}
-#joyKnob{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
-.tbtn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none}
+#joyKnob{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
+.tbtn{position:fixed;pointer-events:auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none}
 .tbtn:active{opacity:1;transform:scale(.94)}
-#btnDash{width:76px;height:76px;right:104px;bottom:26px}
-#btnPulse{width:76px;height:76px;right:20px;bottom:26px;background:var(--gold)}
-#btnPause{width:42px;height:42px;right:16px;top:16px;background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
+#btnDash{width:76px;height:76px;right:calc(var(--barR) + 104px);bottom:calc(var(--stageBottom) + 26px)}
+#btnPulse{width:76px;height:76px;right:calc(var(--barR) + 20px);bottom:calc(var(--stageBottom) + 26px);background:var(--gold)}
+#btnPause{width:42px;height:42px;right:calc(var(--barR) + 16px);top:calc(var(--stageTop) + 16px);background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
+#touch.bars #btnDash{right:calc((var(--barR) - 76px)/2);bottom:calc(var(--stageBottom) + 116px)}
+#touch.bars #btnPulse{right:calc((var(--barR) - 76px)/2);bottom:calc(var(--stageBottom) + 26px)}
+#touch.bars #btnPause{right:calc((var(--barR) - 42px)/2)}
 @media(max-width:700px){
- #btnDash{width:62px;height:62px;right:82px;bottom:14px}
- #btnPulse{width:62px;height:62px;right:14px;bottom:14px}
+ #btnDash{width:62px;height:62px;right:calc(var(--barR) + 82px);bottom:calc(var(--stageBottom) + 14px)}
+ #btnPulse{width:62px;height:62px;right:calc(var(--barR) + 14px);bottom:calc(var(--stageBottom) + 14px)}
+ #touch.bars #btnDash{right:calc((var(--barR) - 62px)/2);bottom:calc(var(--stageBottom) + 86px)}
+ #touch.bars #btnPulse{right:calc((var(--barR) - 62px)/2);bottom:calc(var(--stageBottom) + 14px)}
 }
 .panel{width:min(1000px,100%);text-align:center}
 .eyebrow{color:var(--mint);font:700 12px monospace;letter-spacing:.2em}
@@ -80,6 +91,29 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
  .pn-opt{width:12px;height:12px;font-size:7px}
  .pn.boss .pn-opt{width:15px;height:15px;font-size:8px}
 }
+/* Short landscape viewports (phones in the recommended orientation) don't
+   have room for the room-choice/mutation panel at full size — it must fit
+   without scrolling, since the cards are the primary action. */
+@media(max-height:520px) and (pointer:coarse){
+ #overlay{padding:1.5% 4%}
+ .eyebrow{font-size:9px}
+ h1{font-size:19px;margin:4px 0}
+ .sub{font-size:10px;line-height:1.35;margin:4px auto}
+ .small{font-size:9px;line-height:1.4;margin:4px 0}
+ .pathmap{margin:6px 0 0}
+ .pn-opt{width:11px;height:11px;font-size:7px}
+ .pn.boss .pn-opt{width:14px;height:14px;font-size:8px}
+ .cards{gap:6px;margin:6px 0}
+ .card{min-height:0;padding:7px 9px}
+ .card em{font-size:8px}
+ .card h3{font-size:11px;margin:3px 0 2px}
+ .card p{font-size:9px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .card small{font-size:8px;margin-top:3px}
+ .buttons{margin-top:6px;gap:6px}
+ .button{padding:5px 10px;font-size:9px}
+ .stats{margin:8px 0;gap:14px}
+ .stats b{font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -87,6 +121,7 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
 <div id="stage">
 <canvas id="game"></canvas>
 <div id="overlay"></div>
+</div>
 <div id="touch">
  <div id="joyZone"></div>
  <div id="joyBase"></div>
@@ -94,7 +129,6 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
  <button type="button" id="btnDash" class="tbtn">DASH</button>
  <button type="button" id="btnPulse" class="tbtn">PULSE</button>
  <button type="button" id="btnPause" class="tbtn">II</button>
-</div>
 </div>
 
 <script>
@@ -125,11 +159,11 @@ let joyId=null,joyOrigin={x:0,y:0};
 const JOY_RADIUS=52;
 
 function setJoy(clientX,clientY,originX,originY){
- const r=canvas.getBoundingClientRect();
- joyBase.style.left=(originX-r.left)+"px";
- joyBase.style.top=(originY-r.top)+"px";
- joyKnob.style.left=(clientX-r.left)+"px";
- joyKnob.style.top=(clientY-r.top)+"px";
+ // #touch now spans the full viewport, so client coordinates map directly.
+ joyBase.style.left=originX+"px";
+ joyBase.style.top=originY+"px";
+ joyKnob.style.left=clientX+"px";
+ joyKnob.style.top=clientY+"px";
 }
 
 joyZone.addEventListener("pointerdown",e=>{
@@ -375,6 +409,23 @@ function resize(){
  const scale=Math.min(devicePixelRatio||1,2);
  canvas.width=Math.round(r.width*scale);
  canvas.height=Math.round(r.height*scale);
+
+ // Publish the stage's letterbox geometry as CSS vars so the touch
+ // controls (now positioned relative to the full viewport) can sit in
+ // the side bars beside the stage instead of on top of the play field.
+ const barL=r.left,barR=innerWidth-r.right;
+ const root=document.documentElement.style;
+ root.setProperty("--barL",barL+"px");
+ root.setProperty("--barR",barR+"px");
+ root.setProperty("--stageTop",r.top+"px");
+ root.setProperty("--stageBottom",(innerHeight-r.bottom)+"px");
+ root.setProperty("--stageW",r.width+"px");
+ root.setProperty("--stageH",r.height+"px");
+
+ // Only usable as dedicated rails once they're wide enough for a 76px
+ // button plus breathing room; otherwise fall back to overlaying the
+ // stage's corners like before.
+ touchUI.classList.toggle("bars",barL>=92&&barR>=92);
 }
 addEventListener("resize",resize);
 
