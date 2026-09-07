@@ -183,11 +183,17 @@ const keys=new Set();
 const isTouch=matchMedia("(pointer:coarse)").matches;
 const touchUI=document.querySelector("#touch");
 
-// Ask for fullscreen on the first tap so the mobile browser's address bar
+// Ask for fullscreen on every menu tap so the mobile browser's address bar
 // gets out of the way. Must run from a user gesture, so it's called from
-// invoke() rather than on load. Stops retrying once the player has
-// actually left fullscreen once, so it doesn't keep re-prompting after
-// they deliberately back out.
+// invoke() rather than on load. Deliberately retries every time rather than
+// giving up after the first exit — fullscreen can drop for reasons that
+// have nothing to do with the player choosing to leave it (an OS dialog,
+// pulling down the notification shade, rotating the device), and there's
+// no reliable way to tell that apart from a deliberate exit. Since this
+// only ever fires from a real tap, and is a no-op whenever already
+// fullscreen, retrying costs nothing and fixes the case where the player
+// gets kicked out and is then stuck without fullscreen for the rest of
+// the session.
 //
 // iPhone Safari has no Fullscreen API for ordinary page content at all
 // (requestFullscreen/webkitRequestFullscreen are both undefined there —
@@ -198,22 +204,12 @@ const touchUI=document.querySelector("#touch");
 // a2hsHint banner below for the fallback nudge toward that.
 const hasFullscreenAPI=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
 const isStandalone=navigator.standalone===true||matchMedia("(display-mode: standalone)").matches;
-let fsEntered=false,fsDeclined=false;
 function enterFullscreen(){
- if(!isTouch||fsDeclined||document.fullscreenElement)return;
+ if(!isTouch||document.fullscreenElement)return;
  const el=document.documentElement;
  const req=el.requestFullscreen||el.webkitRequestFullscreen;
  if(req)req.call(el).catch(()=>{});
 }
-function onFullscreenChange(){
- if(document.fullscreenElement||document.webkitFullscreenElement){
-  fsEntered=true;
- }else if(fsEntered){
-  fsDeclined=true;
- }
-}
-document.addEventListener("fullscreenchange",onFullscreenChange);
-document.addEventListener("webkitfullscreenchange",onFullscreenChange);
 
 // Nudge iPhone Safari users (the one case with no real fullscreen option)
 // toward Add to Home Screen instead. Dismissed once, remembered forever —
