@@ -264,6 +264,201 @@ const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 
 const MASTER_VOLUME=.35;
 let muted=read("void-bloom-muted",false);
+let lang=read("void-bloom-lang","en");
+function setLang(l){
+ lang=l;
+ write("void-bloom-lang",l);
+}
+// t(key) looks up a short structural UI string; content data (mutations,
+// bosses, notes, etc.) carries its own per-language fields instead, merged
+// in by localize() below, since those need id/max/etc. left untouched.
+function t(key){
+ return (UI[lang]&&UI[lang][key])??UI.en[key]??key;
+}
+// Overlays a content object's `<field>_pl` translations onto its base
+// (English) fields when Polish is active, leaving id/max/tag-free fields
+// like rank numbers untouched. Falls back to English for any field a
+// translation hasn't filled in.
+function localize(item){
+ if(lang!=="pl"||!item)return item;
+
+ const out={...item};
+ for(const k of Object.keys(item)){
+  if(k.endsWith("_pl"))continue;
+  if(item[k+"_pl"]!==undefined)out[k]=item[k+"_pl"];
+ }
+ return out;
+}
+
+const UI={
+ en:{
+  new_expedition:"NEW EXPEDITION",the_garden:"THE GARDEN",how_to_play:"HOW TO PLAY",
+  sound_on:"SOUND: ON",sound_off:"SOUND: OFF",
+  title_sub:"The garden has learned to punish hesitation.<br><b>Dash and pulse are emergency tools, not permanent movement abilities.</b>",
+  best_label:"BEST",victories_label:"VICTORIES",spores_label:"SPORES",
+  touch_hint:"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS",
+  keyboard_hint:"SPACE DASH · E PULSE · WASD / ARROWS MOVE",
+  back:"BACK",continue_btn:"CONTINUE",leave:"LEAVE",
+  tend_garden_title:"TEND THE <span>GARDEN</span>",
+  tend_garden_sub:"Spend spores on permanent upgrades. Every future expedition starts with whatever is unlocked here.",
+  maxed:"MAXED",rank_label:"RANK",spores_footer:"SPORES",
+  danger_title:"READ THE <span>DANGER</span>",
+  danger_sub:"Every enemy has a distinct silhouette and a visible health-shard bar. Chargers telegraph their rush. Snipers draw a firing line. Pink fields slow movement by 65% while you stand inside them.<br><br>Dash cooldowns are long and pulse energy is scarce. Do not spend either ability simply to move faster.",
+  dash_title:"DASH",dash_tag_touch:"BUTTON",dash_tag_key:"SPACE",
+  dash_desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",
+  dash_foot:"Cooldown: roughly 2.3–3.3 seconds.",
+  pulse_title:"PULSE",pulse_tag_key:"E",
+  pulse_desc:"Clears bullets and damages nearby enemies.",
+  pulse_foot:"Recharge is intentionally slow.",
+  enemies_title:"ENEMIES",enemies_tag:"READ",
+  enemies_desc:"Triangles rush, squares shoot, diamonds charge, hexagons soak hits and lumber, stars snipe, rings summon.",
+  enemies_foot:"Health shards show remaining HP.",
+  pathmap_title:"PATH MAP",pathmap_tag:"READ",
+  pathmap_desc:"The row above your choices previews the whole floor. Filled icons are rooms you've resolved; outlined icons are still open.",
+  pathmap_foot:"C combat · E elite · R rest · $ shop · ? unknown · G guardian",
+  reflection_title:"THE REFLECTION",reflection_tag:"???",
+  reflection_desc:"Something wearing your own silhouette occasionally crosses the field. It isn't your friend — but it isn't only your enemy either.",
+  reflection_foot:"It doesn't stay long.",
+  choose_frame_title:"CHOOSE YOUR <span>FRAME</span>",
+  choose_frame_sub:"Different frames change health, damage, movement, fire rate, and dash timing.",
+  frame_tag:"FRAME",hp_label:"HP",damage_label:"DAMAGE",base_dash_label:"BASE DASH",
+  head_start_title:"HEAD START — CHOOSE A <span>MUTATION</span>",
+  boss_title:"BOSS",guardian_tag:"GUARDIAN",boss_desc:(name)=>`${name} blocks the way into the next biome.`,
+  shop_title:"SHOP",scrap_suffix:"SCRAP",shop_desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",
+  route_sub_boss:"A guardian stands between you and the next biome. There is no way around it.",
+  route_sub_normal:"Choose the next pressure test. Not every path offers the same options.",
+  build_btn:"BUILD",title_btn:"TITLE",
+  room_label:"ROOM",level_label:"LEVEL",score_label:"SCORE",
+  rest_title:"REST — CHOOSE A <span>MUTATION</span>",
+  seed_title:"A SEED <span>CRACKS OPEN</span>",seed_desc:(amount)=>`Something valuable was buried here. +${amount} scrap.`,
+  remembers_title:"THE GARDEN <span>REMEMBERS</span>",remembers_desc:"Integrity restored, but nothing more.",
+  stirs_title:"SOMETHING <span>STIRS</span>",stirs_desc:(dmg)=>`An ambush costs ${dmg} integrity — but you salvage 60 scrap from the wreckage.`,
+  cache_title:"A CACHE <span>OVERGROWN</span>",cache_desc:"Thorns guard something useful. It costs 1 integrity to reach.",
+  unknown_mutation_title:"CHOOSE A <span>MUTATION</span>",
+  your_build_title:"YOUR <span>BUILD</span>",
+  dash_short:"DASH",pulse_short:"PULSE",energy_label:"ENERGY",
+  no_mutations:"No mutations yet.",
+  supply_cache_title:"SUPPLY <span>CACHE</span>",
+  supply_cache_sub:"Trade scrap for guaranteed upgrades. Everything here is permanent, but it costs what fighting would have earned instead.",
+  full_repair_title:"FULL REPAIR",full_repair_desc:"Restore integrity to maximum.",
+  reroll_token_title:"REROLL TOKEN",reroll_token_desc:"Gain one extra mutation reroll.",
+  reroll_foot:(n)=>`${n} REROLLS HELD`,
+  sold_out_title:"SOLD OUT",sold_out_desc:"Every mutation has already reached maximum rank.",
+  new_suffix:"NEW",
+  weathered_note_title:"WEATHERED NOTE",weathered_note_desc:"Someone left this behind. Reading it won't help you fight.",
+  note_reveal_title:"A WEATHERED <span>NOTE</span>",
+  level_up_title:"LEVEL UP — CHOOSE A <span>MUTATION</span>",
+  fully_bloomed_title:"FULLY <span>BLOOMED</span>",
+  fully_bloomed_desc:"Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+  mutation_sub:"Read the cards. Your build is the main source of power.",
+  reroll_btn:(n)=>`REROLL (${n})`,refuse_btn:"REFUSE",
+  reclaims_title:"THE GARDEN <span>RECLAIMS YOU</span>",
+  reclaims_sub:"The expedition ends. Your memories remain.",
+  guardian_felled_title:"GUARDIAN FELLED — CHOOSE A <span>REWARD</span>",
+  stat_score:"SCORE",stat_kills:"KILLS",stat_rooms:"ROOMS",stat_mutations:"MUTATIONS",stat_spores:"SPORES",
+  take_root_title:"TAKE <span>ROOT</span>",
+  take_root_sub:"The room is paused. Your cooldowns do not refill while paused.",
+  resume:"RESUME",abandon:"ABANDON",
+  hud_integrity:"INTEGRITY",hud_endless:"ENDLESS",hud_guardian:"GUARDIAN",hud_wave:"WAVE",
+  hud_ready:"READY",
+  hazard_slow:"SLOW",hazard_warning:"WARNING",hazard_move:"MOVE",
+  boss_kill_label:"GUARDIAN FELLED",reflection_kill_label:"THE GARDEN YIELDS",
+  reflection_shattered_label:"REFLECTION SHATTERED",
+  kills_suffix:"KILLS",
+  final_boss_intro:"IT HAS SEEN ENOUGH",
+  enraged_label:"ENRAGED",
+  reflection_spawn_label:"A REFLECTION STIRS",
+  brood_mother_label:"BROOD MOTHER",overdrive_label:"OVERDRIVE",
+  pulse_label:"PULSE",
+  show_hint_touch:"TAP TO CHOOSE · LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS · II PAUSE",
+  show_hint_keys:"CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE",
+  choice_fallback:"CHOICE"
+ },
+ pl:{
+  new_expedition:"NOWA WYPRAWA",the_garden:"OGRÓD",how_to_play:"JAK GRAĆ",
+  sound_on:"DŹWIĘK: WŁ",sound_off:"DŹWIĘK: WYŁ",
+  title_sub:"Ogród nauczył się karać wahanie.<br><b>Unik i puls to narzędzia awaryjne, nie stałe sposoby poruszania się.</b>",
+  best_label:"NAJLEPSZY",victories_label:"ZWYCIĘSTW",spores_label:"ZARODNIKÓW",
+  touch_hint:"DŻOJSTIK PO LEWEJ PORUSZA · PRZYCISKI UNIKU / PULSU",
+  keyboard_hint:"SPACJA UNIK · E PULS · WASD / STRZAŁKI RUCH",
+  back:"WSTECZ",continue_btn:"DALEJ",leave:"WYJDŹ",
+  tend_garden_title:"PIELĘGNUJ <span>OGRÓD</span>",
+  tend_garden_sub:"Wydawaj zarodniki na trwałe ulepszenia. Każda przyszła wyprawa zaczyna się z tym, co tu odblokujesz.",
+  maxed:"MAKSYMALNY",rank_label:"RANGA",spores_footer:"ZARODNIKI",
+  danger_title:"POZNAJ <span>ZAGROŻENIE</span>",
+  danger_sub:"Każdy wróg ma odrębną sylwetkę i widoczny pasek zdrowia. Szarżujący zapowiadają swój atak. Snajperzy rysują linię strzału. Różowe pola spowalniają ruch o 65%, gdy w nich stoisz.<br><br>Czas odnowienia uniku jest długi, a energia pulsu ograniczona. Nie zużywaj żadnej z tych zdolności tylko po to, by szybciej się poruszać.",
+  dash_title:"UNIK",dash_tag_touch:"PRZYCISK",dash_tag_key:"SPACJA",
+  dash_desc:"Krótki awaryjny unik. Zadaje obrażenia mijanym wrogom i daje nietykalność.",
+  dash_foot:"Odnowienie: około 2,3–3,3 sekundy.",
+  pulse_title:"PULS",pulse_tag_key:"E",
+  pulse_desc:"Usuwa pociski i zadaje obrażenia pobliskim wrogom.",
+  pulse_foot:"Odnowienie jest celowo powolne.",
+  enemies_title:"WROGOWIE",enemies_tag:"CZYTAJ",
+  enemies_desc:"Trójkąty szarżują, kwadraty strzelają, romby atakują z rozbiegu, sześciokąty przyjmują trafienia i wolno się poruszają, gwiazdy snajperują, pierścienie przyzywają.",
+  enemies_foot:"Odłamki zdrowia pokazują pozostałe HP.",
+  pathmap_title:"MAPA ŚCIEŻKI",pathmap_tag:"CZYTAJ",
+  pathmap_desc:"Rząd nad wyborami pokazuje podgląd całego piętra. Wypełnione ikony to pokoje już rozwiązane; obrysowane wciąż są otwarte.",
+  pathmap_foot:"C walka · E elita · R odpoczynek · $ sklep · ? nieznane · G strażnik",
+  reflection_title:"ODBICIE",reflection_tag:"???",
+  reflection_desc:"Coś noszącego twoją własną sylwetkę czasem przemierza pole walki. To nie twój przyjaciel — ale też nie tylko wróg.",
+  reflection_foot:"Nie zostaje długo.",
+  choose_frame_title:"WYBIERZ SWÓJ <span>SZKIELET</span>",
+  choose_frame_sub:"Różne szkielety zmieniają zdrowie, obrażenia, ruch, szybkostrzelność i czas uniku.",
+  frame_tag:"SZKIELET",hp_label:"HP",damage_label:"OBRAŻENIA",base_dash_label:"BAZOWY UNIK",
+  head_start_title:"START Z PRZEWAGĄ — WYBIERZ <span>MUTACJĘ</span>",
+  boss_title:"BOSS",guardian_tag:"STRAŻNIK",boss_desc:(name)=>`${name} zagradza drogę do kolejnego biomu.`,
+  shop_title:"SKLEP",scrap_suffix:"ZŁOMU",shop_desc:"Wydaj złom na naprawy, żetony przerzutu lub gwarantowaną mutację.",
+  route_sub_boss:"Strażnik stoi między tobą a kolejnym biomem. Nie da się go obejść.",
+  route_sub_normal:"Wybierz następną próbę. Nie każda ścieżka oferuje te same opcje.",
+  build_btn:"BUDOWA",title_btn:"MENU",
+  room_label:"POKÓJ",level_label:"POZIOM",score_label:"WYNIK",
+  rest_title:"ODPOCZYNEK — WYBIERZ <span>MUTACJĘ</span>",
+  seed_title:"NASIONO <span>PĘKA</span>",seed_desc:(amount)=>`Coś cennego było tu zakopane. +${amount} złomu.`,
+  remembers_title:"OGRÓD <span>PAMIĘTA</span>",remembers_desc:"Integralność przywrócona, ale nic więcej.",
+  stirs_title:"COŚ SIĘ <span>PORUSZA</span>",stirs_desc:(dmg)=>`Zasadzka kosztuje ${dmg} integralności — ale odzyskujesz 60 złomu ze zniszczeń.`,
+  cache_title:"ZAROŚNIĘTA <span>SKRYTKA</span>",cache_desc:"Ciernie strzegą czegoś przydatnego. Dotarcie tam kosztuje 1 integralność.",
+  unknown_mutation_title:"WYBIERZ <span>MUTACJĘ</span>",
+  your_build_title:"TWOJA <span>BUDOWA</span>",
+  dash_short:"UNIK",pulse_short:"PULS",energy_label:"ENERGII",
+  no_mutations:"Brak mutacji.",
+  supply_cache_title:"SKRYTKA <span>ZAOPATRZENIA</span>",
+  supply_cache_sub:"Wymieniaj złom na gwarantowane ulepszenia. Wszystko tu jest trwałe, ale kosztuje tyle, ile zarobiłaby walka.",
+  full_repair_title:"PEŁNA NAPRAWA",full_repair_desc:"Przywraca integralność do maksimum.",
+  reroll_token_title:"ŻETON PRZERZUTU",reroll_token_desc:"Zyskaj dodatkowy przerzut mutacji.",
+  reroll_foot:(n)=>`PRZERZUTÓW: ${n}`,
+  sold_out_title:"WYPRZEDANE",sold_out_desc:"Każda mutacja osiągnęła już maksymalną rangę.",
+  new_suffix:"NOWOŚĆ",
+  weathered_note_title:"ZWIETRZAŁA NOTATKA",weathered_note_desc:"Ktoś to tu zostawił. Czytanie tego nie pomoże ci w walce.",
+  note_reveal_title:"ZWIETRZAŁA <span>NOTATKA</span>",
+  level_up_title:"NOWY POZIOM — WYBIERZ <span>MUTACJĘ</span>",
+  fully_bloomed_title:"W PEŁNI <span>ROZKWITŁY</span>",
+  fully_bloomed_desc:"Każda mutacja osiągnęła maksymalną rangę. Ogród nie ma już nic do zaoferowania — zamiast tego naprawiono 2 integralności.",
+  mutation_sub:"Przeczytaj karty. Twoja budowa to główne źródło mocy.",
+  reroll_btn:(n)=>`PRZERZUĆ (${n})`,refuse_btn:"ODMÓW",
+  reclaims_title:"OGRÓD <span>ODZYSKUJE CIEBIE</span>",
+  reclaims_sub:"Wyprawa się kończy. Twoje wspomnienia pozostają.",
+  guardian_felled_title:"STRAŻNIK POKONANY — WYBIERZ <span>NAGRODĘ</span>",
+  stat_score:"WYNIK",stat_kills:"ZABÓJSTWA",stat_rooms:"POKOJE",stat_mutations:"MUTACJE",stat_spores:"ZARODNIKI",
+  take_root_title:"ZAPUŚĆ <span>KORZENIE</span>",
+  take_root_sub:"Pokój jest zatrzymany. Czasy odnowienia nie odnawiają się w pauzie.",
+  resume:"WZNÓW",abandon:"PORZUĆ",
+  hud_integrity:"INTEGRALNOŚĆ",hud_endless:"NIESKOŃCZONE",hud_guardian:"STRAŻNIK",hud_wave:"FALA",
+  hud_ready:"GOTOWE",
+  hazard_slow:"WOLNO",hazard_warning:"UWAGA",hazard_move:"RUSZAJ",
+  boss_kill_label:"STRAŻNIK POKONANY",reflection_kill_label:"OGRÓD ZBIERA PLON",
+  reflection_shattered_label:"ODBICIE ROZTRZASKANE",
+  kills_suffix:"ZABÓJSTW",
+  final_boss_intro:"WIDZIAŁO JUŻ DOŚĆ",
+  enraged_label:"WŚCIEKŁY",
+  reflection_spawn_label:"ODBICIE SIĘ PORUSZA",
+  brood_mother_label:"MATKA ROJU",overdrive_label:"PRZECIĄŻENIE",
+  pulse_label:"PULS",
+  show_hint_touch:"DOTKNIJ, BY WYBRAĆ · DŻOJSTIK PO LEWEJ · PRZYCISKI UNIKU / PULSU · II PAUZA",
+  show_hint_keys:"KLIKNIJ LUB WCIŚNIJ CYFRY · WASD / STRZAŁKI RUCH · SPACJA UNIK · E PULS · P PAUZA",
+  choice_fallback:"WYBÓR"
+ }
+};
+
 let audioCtx=null,masterGain=null,noiseBuffer=null,ambientNodes=null;
 
 function ensureAudio(){
@@ -483,11 +678,14 @@ resize();
 
 const FRAMES=[
  {id:"seed",name:"SEED",hp:6,speed:270,damage:15,rate:.29,dash:3.6,shots:1,
-  desc:"Balanced frame. Reliable weapons and average mobility."},
+  desc:"Balanced frame. Reliable weapons and average mobility.",
+  desc_pl:"Zrównoważony szkielet. Niezawodna broń i przeciętna mobilność."},
  {id:"thorn",name:"THORN",hp:4,speed:305,damage:11,rate:.27,dash:3.1,shots:2,
-  desc:"Fast and aggressive, but fragile."},
+  desc:"Fast and aggressive, but fragile.",
+  desc_pl:"Szybki i agresywny, ale kruchy."},
  {id:"bastion",name:"BASTION",hp:8,speed:230,damage:23,rate:.41,dash:4.2,shots:1,
-  desc:"Slow, durable, and heavy-hitting."}
+  desc:"Slow, durable, and heavy-hitting.",
+  desc_pl:"Powolny, wytrzymały i mocno bijący."}
 ];
 
 // Two lore lines per mutation: an "early" voice (still mostly the player's
@@ -499,53 +697,97 @@ const MUTATION_DEEP_THRESHOLD=4;
 const MUTATIONS=[
  ["power","Razor Petals",5,"+24% weapon damage.","WEAPON",
   "The petals cut cleaner every time you let them. You almost feel it deciding for you.",
-  "You no longer ask what the blade wants. It already knew what you'd swing at."],
+  "You no longer ask what the blade wants. It already knew what you'd swing at.",
+  "Płatki Brzytwy","+24% obrażeń broni.",
+  "Płatki tną coraz czyściej za każdym razem, gdy im na to pozwalasz. Prawie czujesz, jak to ono decyduje za ciebie.",
+  "Nie pytasz już, czego chce ostrze. Ono już wiedziało, w co uderzysz."],
  ["rate","Quickening",5,"Fire 16% faster.","WEAPON",
   "Your hands move faster than your thoughts arrive. That used to bother you.",
-  "There's no lag between wanting and doing anymore. There's barely a you in between."],
+  "There's no lag between wanting and doing anymore. There's barely a you in between.",
+  "Przyspieszenie","Strzela 16% szybciej.",
+  "Twoje dłonie poruszają się szybciej, niż nadchodzą myśli. Kiedyś by cię to niepokoiło.",
+  "Nie ma już opóźnienia między chceniem a robieniem. Ledwo jest jakieś \"ty\" pomiędzy."],
  ["spread","Forked Bloom",3,"Add one projectile per rank.","WEAPON",
   "One shot becomes two. The garden likes symmetry. It's teaching you to like it too.",
-  "Everything you make branches now, the way roots branch, the way you branch."],
+  "Everything you make branches now, the way roots branch, the way you branch.",
+  "Rozwidlony Kwiat","Dodaje jeden pocisk na rangę.",
+  "Jeden strzał staje się dwoma. Ogród lubi symetrię. Uczy cię lubić ją też.",
+  "Wszystko, co tworzysz, teraz się rozgałęzia — tak jak korzenie, tak jak ty."],
  ["pierce","Needlework",3,"Projectiles pierce more enemies.","WEAPON",
   "The thorn goes all the way through. It never used to. Neither did you, once.",
-  "Nothing stops at one anymore. Not the needle. Not you."],
+  "Nothing stops at one anymore. Not the needle. Not you.",
+  "Robota Igłą","Pociski przebijają więcej wrogów.",
+  "Cierń przechodzi teraz na wylot. Kiedyś tak nie było. Ty też kiedyś tak nie potrafiłeś.",
+  "Nic już nie zatrzymuje się na jednym. Ani igła. Ani ty."],
  ["speed","Wild Current",3,"+12% movement speed.","MOBILITY",
   "The current is faster than your legs remember being. It isn't unpleasant.",
-  "You've stopped noticing where your feet decide to go without you."],
+  "You've stopped noticing where your feet decide to go without you.",
+  "Dziki Prąd","+12% prędkości ruchu.",
+  "Prąd jest szybszy, niż pamiętają twoje nogi. To nie jest nieprzyjemne.",
+  "Przestałeś zauważać, dokąd twoje stopy decydują się iść bez ciebie."],
  ["dash","Slipstream",4,"Dash cooldown reduced by 10%.","DASH",
   "The gap between one place and the next keeps shrinking. Convenient. Slightly wrong.",
-  "Distance is a suggestion the garden no longer bothers making to you."],
+  "Distance is a suggestion the garden no longer bothers making to you.",
+  "Prąd Poślizgowy","Odnowienie uniku skrócone o 10%.",
+  "Odstęp między jednym miejscem a następnym wciąż się kurczy. Wygodne. Odrobinę niewłaściwe.",
+  "Odległość to sugestia, którą ogród przestał ci już nawet składać."],
  ["wake","Afterimage",3,"Dash leaves damaging blooms.","DASH",
   "You leave more of yourself behind with every step now. Something grows where you were.",
-  "The trail you leave is more you than you are. It's doing fine without the rest of you."],
+  "The trail you leave is more you than you are. It's doing fine without the rest of you.",
+  "Powidok","Unik zostawia raniące kwiaty.",
+  "Zostawiasz teraz coraz więcej siebie za każdym krokiem. Coś rośnie tam, gdzie byłeś.",
+  "Ślad, który zostawiasz, jest bardziej tobą niż ty sam. Radzi sobie bez reszty ciebie."],
  ["armor","Living Armor",4,"+1 maximum HP and repair 2.","SURVIVAL",
   "The garden mends you before you finish flinching. You didn't ask it to.",
-  "It isn't healing anymore. It's just deciding you were never hurt."],
+  "It isn't healing anymore. It's just deciding you were never hurt.",
+  "Żywy Pancerz","+1 maks. HP i naprawia 2.",
+  "Ogród naprawia cię, zanim zdążysz się skrzywić z bólu. Nie prosiłeś go o to.",
+  "To już nie jest leczenie. To po prostu decyzja, że nigdy nie zostałeś zraniony."],
  ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE",
   "Something in your chest learned to push back. It wasn't there before you arrived.",
-  "The pulse doesn't come from you. You just happen to be where it comes out."],
+  "The pulse doesn't come from you. You just happen to be where it comes out.",
+  "Horyzont Zdarzeń","Obrażenia pulsu rosną i kosztuje mniej.",
+  "Coś w twojej piersi nauczyło się odpychać. Nie było tego, zanim tu przybyłeś.",
+  "Puls nie pochodzi od ciebie. Po prostu akurat tam wychodzi na zewnątrz."],
  ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE",
   "You feel steadier in the light here. You didn't used to need to.",
-  "You've stopped telling the difference between resting and rooting."],
+  "You've stopped telling the difference between resting and rooting.",
+  "Fotosynteza","Puls odnawia się szybciej.",
+  "Czujesz się tu pewniej w świetle. Kiedyś tego nie potrzebowałeś.",
+  "Przestałeś odróżniać odpoczynek od zapuszczania korzeni."],
  ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL",
   "Something in your bite runs cold now. You don't remember choosing that.",
-  "You slow everything you touch. The garden calls this mercy."],
+  "You slow everything you touch. The garden calls this mercy.",
+  "Zimowy Sok","Strzały spowalniają wrogów.",
+  "Coś w twoim ukąszeniu jest teraz zimne. Nie pamiętasz, żeby to wybrać.",
+  "Spowalniasz wszystko, czego dotkniesz. Ogród nazywa to litością."],
  ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL",
   "A small fire follows your aim now, patient, like it's been waiting for permission.",
-  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to."]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6]}));
+  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to.",
+  "Żarzące Nasiona","Strzały podpalają wrogów.",
+  "Mały ogień podąża teraz za twoim celowaniem, cierpliwy, jakby czekał na pozwolenie.",
+  "Nie czujesz już ciepła. Stałeś się czymś, co go nie potrzebuje."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6],
+ name_pl:x[7],desc_pl:x[8],loreEarly_pl:x[9],loreLate_pl:x[10]}));
 
 // Weapons are the player's own — not the garden's to give. They're always
 // bought back with scrap, never handed over for free, and their lore stays
 // one consistent, personal voice rather than drifting like mutations do.
 const WEAPONS=[
  ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL",
-  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly."],
+  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly.",
+  "Aureola Cierni","Krążące ostrza raniące wszystko, czego dotkną.",
+  "Kiedyś twoje — jesteś tego prawie pewien. Krąży teraz wokół ciebie, jakby wciąż czekało, aż ktoś je porządnie podniesie."],
  ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM",
-  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it."],
+  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it.",
+  "Lanca Zarodnikowa","Przebijająca wiązka wystrzeliwana w cel co jakiś czas.",
+  "Pamięta kształt twojego uchwytu lepiej niż ty sam. Złom ją odkupił. Złom nie odkupi wspomnienia trzymania jej."],
  ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC",
-  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc."]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5]}));
+  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc.",
+  "Łańcuchowa Iskra","Pocisk, który po trafieniu przeskakuje na innego pobliskiego wroga.",
+  "Kiedyś skakała między twoimi dłońmi — sztuczka, którą znałeś, zanim poznałeś cokolwiek innego. Część ciebie wciąż jest w tym łuku."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5],
+ name_pl:x[6],desc_pl:x[7],lore_pl:x[8]}));
 
 // Notes are physical scraps of memory belonging to the garden's other
 // inhabitants — sometimes the player's own life before arriving, sometimes
@@ -583,6 +825,37 @@ const NOTES=[
  ]
 ];
 
+const NOTES_PL=[
+ [
+  "Zostawiłam czajnik na kuchence. To ostatnia rzecz, jaką pamiętam, że pomyślałam. Nie pożegnanie. Czajnik.",
+  "Był pies. Chyba był pies. Wciąż czuję, gdzie zwykł siadać.",
+  "Deszcz na szybie, której już nie potrafię umiejscowić. Wiem, że to miało znaczenie.",
+  "Moje ręce kiedyś czymś pachniały. Chlebem, może. Brakuje mi zapachu, który był mój.",
+  "Wciąż próbuję przypomnieć sobie imię, które nie brzmi \"ty\". Miałam jakieś."
+ ],
+ [
+  "Ścieżki były wczoraj inne. Zaczynam myśleć, że nigdy nie są takie same dwa razy, a dopiero teraz to zauważyłam.",
+  "Ono nie pyta. Po prostu robi ci miejsce, tak jak woda robi miejsce kamieniowi.",
+  "Policzyłam kwiaty. Jutro będzie inna liczba, i zawsze będę to wiedziała.",
+  "Coś we mnie się na to zgodziło. Nie pamiętam, żebym się zgadzała. Pamiętam, że się zgadzam.",
+  "Głód nie jest już mój. Ma teraz lepsze maniery."
+ ],
+ [
+  "Ktoś napisał to przede mną, chyba. Pismo wciąż prawie pasuje do mojego.",
+  "Znalazłam własny ślad buta idący w złą stronę. Nie pamiętam, żebym zawracała.",
+  "Jest wersja tej notatki, w której cię ostrzegam. Musiałam już jej użyć.",
+  "Nie jesteśmy pierwszą rośliną tutaj. Nie jesteśmy nawet pierwszą wersją tej rośliny.",
+  "Jeśli to wydaje się znajome, powinno. Może to ty to napisałeś."
+ ],
+ [
+  "kształt jest dobry jest dobry jest",
+  "żadne drzwi nigdy nie były drzwiami zawsze były ścianą uprzejmą",
+  "ja ja ja—ogród liczy lepiej niż ja ja ja",
+  "śpij dobrze mówią korzenie śpij dobrze śpij korzenie",
+  "nie zgubiona. ułożona. nie zgubiona. ułożona. nie"
+ ]
+];
+
 // A brief on-canvas flash, not always shown, right at the moment of death —
 // first-person, uncertain, never explaining itself.
 const DEATH_ECHOES=[
@@ -601,12 +874,32 @@ const DEATH_ECHOES=[
  "You were someone, before the roots."
 ];
 
+const DEATH_ECHOES_PL=[
+ "Robiłeś to już wcześniej.",
+ "Ogród ci wybacza. Zawsze wybacza.",
+ "Czy kiedyś były drzwi?",
+ "Nie twój pierwszy rozkwit.",
+ "Kształt pamięta cię lepiej, niż ty pamiętasz jego.",
+ "Odpocznij. Jesteś prawie właściwy.",
+ "Twoje imię brzmiało—",
+ "To nie okrucieństwo. Nigdy nim nie było.",
+ "Ściany zawsze były tak blisko.",
+ "Wciąż wracasz nie tak.",
+ "Coś na zewnątrz czeka. Tak myślisz.",
+ "Ile razy już, teraz?",
+ "Byłeś kimś, zanim pojawiły się korzenie."
+];
+
 const META_UPGRADES=[
- ["vitality","Deep Roots",5,"+1 starting max HP per rank.",60],
- ["cache","Stocked Cache",5,"+10 starting scrap per rank.",40],
- ["memory","Spare Blooms",3,"+1 starting mutation reroll per rank.",100],
- ["headstart","Head Start",1,"Begin every run with one mutation already chosen.",250]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],baseCost:x[4]}));
+ ["vitality","Deep Roots",5,"+1 starting max HP per rank.",60,
+  "Głębokie Korzenie","+1 do startowego maks. HP na rangę."],
+ ["cache","Stocked Cache",5,"+10 starting scrap per rank.",40,
+  "Zaopatrzona Skrytka","+10 startowego złomu na rangę."],
+ ["memory","Spare Blooms",3,"+1 starting mutation reroll per rank.",100,
+  "Zapasowe Kwiaty","+1 startowy przerzut mutacji na rangę."],
+ ["headstart","Head Start",1,"Begin every run with one mutation already chosen.",250,
+  "Przewaga Startowa","Zaczynaj każdą wyprawę z jedną mutacją już wybraną."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],baseCost:x[4],name_pl:x[5],desc_pl:x[6]}));
 
 const ENEMIES={
  seeker:{hp:36,r:13,speed:94,color:C.pink,xp:3,shape:"triangle"},
@@ -619,10 +912,10 @@ const ENEMIES={
 };
 
 const BIOMES=[
- {name:"VERDANT WRECK",color:C.mint,bg:"#112820"},
- {name:"MIRROR ARCHIVE",color:C.violet,bg:"#211932"},
- {name:"CINDER ENGINE",color:C.gold,bg:"#2d2018"},
- {name:"EVENT HORIZON",color:C.blue,bg:"#102334"}
+ {name:"VERDANT WRECK",name_pl:"ZIELONY WRAK",color:C.mint,bg:"#112820"},
+ {name:"MIRROR ARCHIVE",name_pl:"LUSTRZANE ARCHIWUM",color:C.violet,bg:"#211932"},
+ {name:"CINDER ENGINE",name_pl:"SILNIK ŻARU",color:C.gold,bg:"#2d2018"},
+ {name:"EVENT HORIZON",name_pl:"HORYZONT ZDARZEŃ",color:C.blue,bg:"#102334"}
 ];
 
 const BOSSES=[
@@ -679,7 +972,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
  const cardHTML=cards.map((a,i)=>{
   if(!a.disabled)actions[i]=a.fn;
   return `<button type="button" class="card" data-action="${i}" ${a.disabled?"disabled":""}>
-   <em>${i+1} / ${esc(a.tag||"CHOICE")}</em>
+   <em>${i+1} / ${esc(a.tag||t("choice_fallback"))}</em>
    <h3>${esc(a.title)}</h3>
    <p>${esc(a.desc||"")}</p>
    ${a.lore?`<p class="lore">${esc(a.lore)}</p>`:""}
@@ -700,7 +993,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
   ${extra}
   ${cards.length?`<div class="cards">${cardHTML}</div>`:""}
   <div class="buttons">${buttonHTML}</div>
-  <div class="small">${isTouch?"TAP TO CHOOSE · LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS · II PAUSE":"CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE"}</div>
+  <div class="small">${isTouch?t("show_hint_touch"):t("show_hint_keys")}</div>
  </div>`;
 
  overlay.classList.remove("hidden");
@@ -733,33 +1026,36 @@ function title(){
  stopAmbient();
 
  show("VOID BLOOM<br><span>ECHOES</span>",
-  "The garden has learned to punish hesitation.<br><b>Dash and pulse are emergency tools, not permanent movement abilities.</b>",
+  t("title_sub"),
   [],
   [
-   {title:"NEW EXPEDITION",fn:frameSelect},
-   {title:"THE GARDEN",secondary:true,fn:garden},
-   {title:"HOW TO PLAY",secondary:true,fn:help},
-   {title:muted?"SOUND: OFF":"SOUND: ON",secondary:true,fn:()=>{toggleMute();title();}}
+   {title:t("new_expedition"),fn:frameSelect},
+   {title:t("the_garden"),secondary:true,fn:garden},
+   {title:t("how_to_play"),secondary:true,fn:help},
+   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();title();}},
+   {title:lang==="en"?"● EN":"EN",secondary:true,disabled:lang==="en",fn:()=>{setLang("en");title();}},
+   {title:lang==="pl"?"● PL":"PL",secondary:true,disabled:lang==="pl",fn:()=>{setLang("pl");title();}}
   ],
-  `<div class="small">BEST ${meta.best.toLocaleString()} · ${meta.wins} VICTORIES · ${meta.spores} SPORES<br>
-  ${isTouch?"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS":"SPACE DASH · E PULSE · WASD / ARROWS MOVE"}</div>`);
+  `<div class="small">${t("best_label")} ${meta.best.toLocaleString()} · ${meta.wins} ${t("victories_label")} · ${meta.spores} ${t("spores_label")}<br>
+  ${isTouch?t("touch_hint"):t("keyboard_hint")}</div>`);
 }
 
 function upgradeCost(u,r){return u.baseCost*(r+1)}
 
 function garden(){
- show("TEND THE <span>GARDEN</span>",
-  "Spend spores on permanent upgrades. Every future expedition starts with whatever is unlocked here.",
+ show(t("tend_garden_title"),
+  t("tend_garden_sub"),
   META_UPGRADES.map(u=>{
    const r=metaRank(u.id);
    const maxed=r>=u.max;
    const cost=upgradeCost(u,r);
+   const lu=localize(u);
 
    return {
-    title:u.name,
-    tag:maxed?"MAXED":`${cost} SPORES`,
-    desc:u.desc,
-    foot:`RANK ${r}/${u.max}`,
+    title:lu.name,
+    tag:maxed?t("maxed"):`${cost} ${t("spores_label")}`,
+    desc:lu.desc,
+    foot:`${t("rank_label")} ${r}/${u.max}`,
     disabled:maxed||meta.spores<cost,
     fn:()=>{
      meta.spores-=cost;
@@ -770,32 +1066,35 @@ function garden(){
     }
    };
   }),
-  [{title:"BACK",secondary:true,fn:title}],
-  `<div class="small">SPORES ${meta.spores}</div>`);
+  [{title:t("back"),secondary:true,fn:title}],
+  `<div class="small">${t("spores_footer")} ${meta.spores}</div>`);
 }
 
 function help(){
- show("READ THE <span>DANGER</span>",
-  "Every enemy has a distinct silhouette and a visible health-shard bar. Chargers telegraph their rush. Snipers draw a firing line. Pink fields slow movement by 65% while you stand inside them.<br><br>Dash cooldowns are long and pulse energy is scarce. Do not spend either ability simply to move faster.",
+ show(t("danger_title"),
+  t("danger_sub"),
   [
-   {title:"DASH",tag:isTouch?"BUTTON":"SPACE",desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",foot:"Cooldown: roughly 2.3–3.3 seconds."},
-   {title:"PULSE",tag:isTouch?"BUTTON":"E",desc:"Clears bullets and damages nearby enemies.",foot:"Recharge is intentionally slow."},
-   {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, hexagons soak hits and lumber, stars snipe, rings summon.",foot:"Health shards show remaining HP."},
-   {title:"PATH MAP",tag:"READ",desc:"The row above your choices previews the whole floor. Filled icons are rooms you've resolved; outlined icons are still open.",foot:"C combat · E elite · R rest · $ shop · ? unknown · G guardian"},
-   {title:"THE REFLECTION",tag:"???",desc:"Something wearing your own silhouette occasionally crosses the field. It isn't your friend — but it isn't only your enemy either.",foot:"It doesn't stay long."}
+   {title:t("dash_title"),tag:isTouch?t("dash_tag_touch"):t("dash_tag_key"),desc:t("dash_desc"),foot:t("dash_foot")},
+   {title:t("pulse_title"),tag:isTouch?t("dash_tag_touch"):t("pulse_tag_key"),desc:t("pulse_desc"),foot:t("pulse_foot")},
+   {title:t("enemies_title"),tag:t("enemies_tag"),desc:t("enemies_desc"),foot:t("enemies_foot")},
+   {title:t("pathmap_title"),tag:t("pathmap_tag"),desc:t("pathmap_desc"),foot:t("pathmap_foot")},
+   {title:t("reflection_title"),tag:t("reflection_tag"),desc:t("reflection_desc"),foot:t("reflection_foot")}
   ],
-  [{title:"BACK",fn:title}]);
+  [{title:t("back"),fn:title}]);
 }
 
 function frameSelect(){
- show("CHOOSE YOUR <span>FRAME</span>",
-  "Different frames change health, damage, movement, fire rate, and dash timing.",
-  FRAMES.map(f=>({
-   title:f.name,tag:"FRAME",desc:f.desc,
-   foot:`${f.hp} HP · ${f.damage} DAMAGE · ${f.dash}s BASE DASH`,
-   fn:()=>begin(f.id)
-  })),
-  [{title:"BACK",secondary:true,fn:title}]);
+ show(t("choose_frame_title"),
+  t("choose_frame_sub"),
+  FRAMES.map(f=>{
+   const lf=localize(f);
+   return {
+    title:lf.name,tag:t("frame_tag"),desc:lf.desc,
+    foot:`${f.hp} ${t("hp_label")} · ${f.damage} ${t("damage_label")} · ${f.dash}s ${t("base_dash_label")}`,
+    fn:()=>begin(f.id)
+   };
+  }),
+  [{title:t("back"),secondary:true,fn:title}]);
 }
 
 function begin(frame){
@@ -811,18 +1110,18 @@ function begin(frame){
  R.hp=S.maxHp;
 
  if(metaRank("headstart")){
-  mutationChoice(route,"HEAD START — CHOOSE A <span>MUTATION</span>");
+  mutationChoice(route,t("head_start_title"));
  }else{
   route();
  }
 }
 
 const NODE_INFO={
- combat:{title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
- elite:{title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
- rest:{title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
- shop:{title:"SHOP",tag:()=>`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop},
- unknown:{title:"UNKNOWN",tag:"???",desc:"An uncertain encounter. Could be a blessing, could cost you.",fn:unknownEvent}
+ combat:{title:"COMBAT",title_pl:"WALKA",tag:"FIVE WAVES",tag_pl:"PIĘĆ FAL",desc:"Escalating enemy waves.",desc_pl:"Narastające fale wrogów.",fn:()=>enter("combat")},
+ elite:{title:"ELITE",title_pl:"ELITA",tag:"SIX WAVES",tag_pl:"SZEŚĆ FAL",desc:"Stronger enemies, faster projectiles, better rewards.",desc_pl:"Silniejsi wrogowie, szybsze pociski, lepsze nagrody.",fn:()=>enter("elite")},
+ rest:{title:"REST",title_pl:"ODPOCZYNEK",tag:"RECOVERY",tag_pl:"REGENERACJA",desc:"Repair 35% HP and choose a mutation. The depth still advances.",desc_pl:"Naprawia 35% HP i pozwala wybrać mutację. Głębokość mimo to wzrasta.",fn:rest},
+ shop:{title:"SHOP",title_pl:"SKLEP",tag:()=>`${R.scrap} ${t("scrap_suffix")}`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",desc_pl:"Wydaj złom na naprawy, żetony przerzutu lub gwarantowaną mutację.",fn:shop},
+ unknown:{title:"UNKNOWN",title_pl:"NIEZNANE",tag:"???",desc:"An uncertain encounter. Could be a blessing, could cost you.",desc_pl:"Niepewne spotkanie. Może być błogosławieństwem, może cię kosztować.",fn:unknownEvent}
 };
 
 const NODE_COLOR={combat:"var(--ink)",elite:"var(--pink)",rest:"var(--mint)",shop:"var(--gold)",unknown:"var(--violet)"};
@@ -869,33 +1168,35 @@ function route(){
 
  if(boss){
   cards=[
-   {title:"BOSS",tag:"GUARDIAN",desc:`${boss.name} blocks the way into the next biome.`,fn:()=>enter("boss")},
-   {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
+   {title:t("boss_title"),tag:t("guardian_tag"),desc:t("boss_desc")(boss.name),fn:()=>enter("boss")},
+   {title:t("shop_title"),tag:`${R.scrap} ${t("scrap_suffix")}`,desc:t("shop_desc"),fn:shop}
   ];
  }else{
   if(R.mapAct!==Math.floor(R.depth/7))generateActMap();
 
   cards=R.actMap[R.depth%7].map(id=>{
-   const info=NODE_INFO[id];
+   const info=localize(NODE_INFO[id]);
    return {title:info.title,tag:typeof info.tag==="function"?info.tag():info.tag,desc:info.desc,fn:info.fn};
   });
  }
 
- show(`${biome.name.split(" ")[0]} <span>${biome.name.split(" ").slice(1).join(" ")}</span>`,
-  boss?"A guardian stands between you and the next biome. There is no way around it.":"Choose the next pressure test. Not every path offers the same options.",
+ const biomeName=localize(biome).name;
+
+ show(`${biomeName.split(" ")[0]} <span>${biomeName.split(" ").slice(1).join(" ")}</span>`,
+  boss?t("route_sub_boss"):t("route_sub_normal"),
   cards,
   [
-   {title:"BUILD",secondary:true,fn:build},
-   {title:"TITLE",secondary:true,fn:title}
+   {title:t("build_btn"),secondary:true,fn:build},
+   {title:t("title_btn"),secondary:true,fn:title}
   ],
-  `${pathMapHTML()}<div class="small">ROOM ${R.depth+1} · LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · SCORE ${R.score}</div>`);
+  `${pathMapHTML()}<div class="small">${t("room_label")} ${R.depth+1} · ${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("score_label")} ${R.score}</div>`);
 }
 
 function rest(){
  if(R.actPicks)R.actPicks[R.depth%7]="rest";
  R.depth++;
  heal(Math.ceil(S.maxHp*.35));
- mutationChoice(route,"REST — CHOOSE A <span>MUTATION</span>");
+ mutationChoice(route,t("rest_title"));
 }
 
 function unknownEvent(){
@@ -907,16 +1208,16 @@ function unknownEvent(){
  if(roll<.35){
   const amount=40+Math.floor(R.depth*3);
   R.scrap+=amount;
-  show("A SEED <span>CRACKS OPEN</span>",
-   `Something valuable was buried here. +${amount} scrap.`,
+  show(t("seed_title"),
+   t("seed_desc")(amount),
    [],
-   [{title:"CONTINUE",fn:route}]);
+   [{title:t("continue_btn"),fn:route}]);
  }else if(roll<.6){
   heal(Math.ceil(S.maxHp*.5));
-  show("THE GARDEN <span>REMEMBERS</span>",
-   "Integrity restored, but nothing more.",
+  show(t("remembers_title"),
+   t("remembers_desc"),
    [],
-   [{title:"CONTINUE",fn:route}]);
+   [{title:t("continue_btn"),fn:route}]);
  }else if(roll<.85){
   const dmg=Math.random()<.5?1:2;
   R.hp-=dmg;
@@ -928,10 +1229,10 @@ function unknownEvent(){
   }
 
   R.scrap+=60;
-  show("SOMETHING <span>STIRS</span>",
-   `An ambush costs ${dmg} integrity — but you salvage 60 scrap from the wreckage.`,
+  show(t("stirs_title"),
+   t("stirs_desc")(dmg),
    [],
-   [{title:"CONTINUE",fn:route}]);
+   [{title:t("continue_btn"),fn:route}]);
  }else{
   R.hp-=1;
   sfx.hit();
@@ -941,10 +1242,10 @@ function unknownEvent(){
    return;
   }
 
-  show("A CACHE <span>OVERGROWN</span>",
-   "Thorns guard something useful. It costs 1 integrity to reach.",
+  show(t("cache_title"),
+   t("cache_desc"),
    [],
-   [{title:"CONTINUE",fn:()=>mutationChoice(route,"CHOOSE A <span>MUTATION</span>")}]);
+   [{title:t("continue_btn"),fn:()=>mutationChoice(route,t("unknown_mutation_title"))}]);
  }
 }
 
@@ -989,11 +1290,11 @@ function build(){
  const mods=MUTATIONS.filter(x=>rank(x.id));
  const owned=WEAPONS.filter(x=>weaponRank(x.id));
 
- show("YOUR <span>BUILD</span>",
-  `LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · DAMAGE ${S.damage.toFixed(1)} · DASH ${S.dashCD.toFixed(2)}s · PULSE ${S.pulseCost.toFixed(0)} ENERGY`,
+ show(t("your_build_title"),
+  `${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("damage_label")} ${S.damage.toFixed(1)} · ${t("dash_short")} ${S.dashCD.toFixed(2)}s · ${t("pulse_short")} ${S.pulseCost.toFixed(0)} ${t("energy_label")}`,
   [],
-  [{title:"BACK",fn:route}],
-  `<div>${owned.map(x=>`<span class="badge">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":"No mutations yet.")}</div>`);
+  [{title:t("back"),fn:route}],
+  `<div>${owned.map(x=>`<span class="badge">${localize(x).name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${localize(x).name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":t("no_mutations"))}</div>`);
 }
 
 function pickNote(){
@@ -1026,11 +1327,13 @@ function shop(){
  const wepRank=wep?weaponRank(wep.id):0;
  const wepCost=wep?50+wepRank*40:0;
 
+ const lmut=mut?localize(mut):null;
+
  const cards=[
   {
-   title:"FULL REPAIR",
-   tag:`${repairCost} SCRAP`,
-   desc:"Restore integrity to maximum.",
+   title:t("full_repair_title"),
+   tag:`${repairCost} ${t("scrap_suffix")}`,
+   desc:t("full_repair_desc"),
    foot:`${R.hp}/${S.maxHp} HP`,
    disabled:R.hp>=S.maxHp||R.scrap<repairCost,
    fn:()=>{
@@ -1041,10 +1344,10 @@ function shop(){
    }
   },
   {
-   title:"REROLL TOKEN",
-   tag:`${rerollCost} SCRAP`,
-   desc:"Gain one extra mutation reroll.",
-   foot:`${R.rerolls} REROLLS HELD`,
+   title:t("reroll_token_title"),
+   tag:`${rerollCost} ${t("scrap_suffix")}`,
+   desc:t("reroll_token_desc"),
+   foot:t("reroll_foot")(R.rerolls),
    disabled:R.scrap<rerollCost,
    fn:()=>{
     R.scrap-=rerollCost;
@@ -1054,11 +1357,11 @@ function shop(){
    }
   },
   mut?{
-   title:mut.name,
-   tag:`${mutCost} SCRAP`,
-   desc:mut.desc,
-   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?mut.loreLate:mut.loreEarly,
-   foot:`RANK ${rank(mut.id)+1}/${mut.max}`,
+   title:lmut.name,
+   tag:`${mutCost} ${t("scrap_suffix")}`,
+   desc:lmut.desc,
+   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?lmut.loreLate:lmut.loreEarly,
+   foot:`${t("rank_label")} ${rank(mut.id)+1}/${mut.max}`,
    disabled:R.scrap<mutCost,
    fn:()=>{
     R.scrap-=mutCost;
@@ -1072,9 +1375,9 @@ function shop(){
     shop();
    }
   }:{
-   title:"SOLD OUT",
+   title:t("sold_out_title"),
    tag:"—",
-   desc:"Every mutation has already reached maximum rank.",
+   desc:t("sold_out_desc"),
    disabled:true
   }
  ];
@@ -1082,12 +1385,13 @@ function shop(){
  // Weapons are the player's own — reclaimed, never granted, always at a
  // price. Unlike the mutation slot, this one isn't always stocked.
  if(wep){
+  const lwep=localize(wep);
   cards.push({
-   title:wep.name,
-   tag:wepRank===0?`${wepCost} SCRAP · NEW`:`${wepCost} SCRAP`,
-   desc:wep.desc,
-   lore:wep.lore,
-   foot:`RANK ${wepRank+1}/${wep.max}`,
+   title:lwep.name,
+   tag:wepRank===0?`${wepCost} ${t("scrap_suffix")} · ${t("new_suffix")}`:`${wepCost} ${t("scrap_suffix")}`,
+   desc:lwep.desc,
+   lore:lwep.lore,
+   foot:`${t("rank_label")} ${wepRank+1}/${wep.max}`,
    disabled:R.scrap<wepCost,
    fn:()=>{
     R.scrap-=wepCost;
@@ -1103,32 +1407,35 @@ function shop(){
 
  if(shopStock.note){
   cards.push({
-   title:"WEATHERED NOTE",
-   tag:`${noteCost} SCRAP`,
-   desc:"Someone left this behind. Reading it won't help you fight.",
+   title:t("weathered_note_title"),
+   tag:`${noteCost} ${t("scrap_suffix")}`,
+   desc:t("weathered_note_desc"),
    foot:"???",
    disabled:R.scrap<noteCost,
    fn:()=>{
     R.scrap-=noteCost;
-    const text=shopStock.note;
+    const noteIdx=NOTES[Math.min(3,Math.floor(R.depth/7))].indexOf(shopStock.note);
+    const text=lang==="pl"&&noteIdx>=0?NOTES_PL[Math.min(3,Math.floor(R.depth/7))][noteIdx]:shopStock.note;
     shopStock.note=null;
     sfx.purchase();
-    show("A WEATHERED <span>NOTE</span>",
+    show(t("note_reveal_title"),
      text,
      [],
-     [{title:"CONTINUE",fn:shop}]);
+     [{title:t("continue_btn"),fn:shop}]);
    }
   });
  }
 
- show("SUPPLY <span>CACHE</span>",
-  `Trade scrap for guaranteed upgrades. Everything here is permanent, but it costs what fighting would have earned instead.`,
+ show(t("supply_cache_title"),
+  t("supply_cache_sub"),
   cards,
-  [{title:"LEAVE",secondary:true,fn:route}],
-  `<div class="small">SCRAP ${R.scrap}</div>`);
+  [{title:t("leave"),secondary:true,fn:route}],
+  `<div class="small">${R.scrap} ${t("scrap_suffix")}</div>`);
 }
 
-function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"){
+function mutationChoice(done,title=null){
+ title=title||t("level_up_title");
+
  // Weapons are never offered here — they're the player's own pieces, only
  // ever reclaimed with scrap in the shop. This screen is purely the
  // garden's gifts.
@@ -1137,25 +1444,26 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
  if(!pool.length){
   heal(2);
   sfx.levelUp();
-  show("FULLY <span>BLOOMED</span>",
-   "Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+  show(t("fully_bloomed_title"),
+   t("fully_bloomed_desc"),
    [],
-   [{title:"CONTINUE",fn:done}]);
+   [{title:t("continue_btn"),fn:done}]);
   return;
  }
 
  sfx.levelUp();
  show(title,
-  "Read the cards. Your build is the main source of power.",
+  t("mutation_sub"),
   pool.map(m=>{
    const current=rank(m.id);
+   const lm=localize(m);
 
    return {
-    title:m.name,
+    title:lm.name,
     tag:m.tag,
-    desc:m.desc,
-    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?m.loreLate:m.loreEarly,
-    foot:`RANK ${current+1}/${m.max}`,
+    desc:lm.desc,
+    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?lm.loreLate:lm.loreEarly,
+    foot:`${t("rank_label")} ${current+1}/${m.max}`,
     fn:()=>{
      R.mods[m.id]=current+1;
      R.mutationPicks++;
@@ -1167,7 +1475,7 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
   }),
   [
    {
-    title:`REROLL (${R.rerolls})`,
+    title:t("reroll_btn")(R.rerolls),
     secondary:true,
     disabled:R.rerolls<=0,
     fn:()=>{
@@ -1179,7 +1487,7 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
     // Without a way to decline, the 0-mutation ending is unreachable —
     // levels (and thus mutation offers) happen automatically from combat
     // XP, with no other way through a run.
-    title:"REFUSE",
+    title:t("refuse_btn"),
     secondary:true,
     fn:done
    }
@@ -1250,7 +1558,7 @@ function wave(){
 
  label(
   600,155,
-  `WAVE ${room.wave}/${room.maxWaves}`,
+  `${t("hud_wave")} ${room.wave}/${room.maxWaves}`,
   room.type==="elite"?C.gold:C.white,
   1.5
  );
@@ -1554,7 +1862,7 @@ function damageEnemy(e,damage){
   burst(e.x,e.y,e.color,60,320);
   ring(e.x,e.y,e.color,140,.6);
   shake=14;
-  label(e.x,e.y-60,e.isReflection?"THE GARDEN YIELDS":"GUARDIAN FELLED",e.color,1.8);
+  label(e.x,e.y-60,e.isReflection?t("reflection_kill_label"):t("boss_kill_label"),e.color,1.8);
   return;
  }
 
@@ -1569,7 +1877,7 @@ function damageEnemy(e,damage){
   burst(e.x,e.y,C.spectral,40,260);
   ring(e.x,e.y,C.spectral,90,.5);
   shake=10;
-  label(e.x,e.y-50,"REFLECTION SHATTERED",C.spectral,1.5);
+  label(e.x,e.y-50,t("reflection_shattered_label"),C.spectral,1.5);
   return;
  }
 
@@ -1593,7 +1901,7 @@ function damageEnemy(e,damage){
  burst(e.x,e.y,e.color,14,160);
 
  if(room.type==="endless"&&room.kills%25===0){
-  label(P.x,P.y-40,`${room.kills} KILLS`,C.gold,1.2);
+  label(P.x,P.y-40,`${room.kills} ${t("kills_suffix")}`,C.gold,1.2);
 }
 }
 
@@ -1615,7 +1923,7 @@ function beginDeath(){
  state="dying";
 
  if(Math.random()<.7){
-  label(600,340,choose(DEATH_ECHOES),C.spectral,1.6);
+  label(600,340,choose(lang==="pl"?DEATH_ECHOES_PL:DEATH_ECHOES),C.spectral,1.6);
  }
 
  setTimeout(()=>{
@@ -1669,7 +1977,7 @@ function spawnReflectionFinal(){
  enemies.push(boss);
  sfx.reflectionAppear();
  sfx.bossSpawn();
- label(600,175,"IT HAS SEEN ENOUGH",C.spectral,2.4);
+ label(600,175,t("final_boss_intro"),C.spectral,2.4);
  return boss;
 }
 
@@ -1746,7 +2054,7 @@ function updateBoss(e,dt){
  if(stage>e.enrageStage){
   e.enrageStage=stage;
   sfx.bossEnrage();
-  label(e.x,e.y-70,"ENRAGED",e.color,1.2);
+  label(e.x,e.y-70,t("enraged_label"),e.color,1.2);
  }
 
  if(e.chargeState===1){
@@ -1816,7 +2124,7 @@ function spawnReflection(){
  room.reflectionSpawned=true;
  R.lastReflectionDepth=R.depth;
  sfx.reflectionAppear();
- label(e.x,e.y-30,"A REFLECTION STIRS",C.spectral,1.6);
+ label(e.x,e.y-30,t("reflection_spawn_label"),C.spectral,1.6);
  return e;
 }
 
@@ -2178,7 +2486,7 @@ function mergeEnemies(e,partner){
  sfx.overdrive();
  burst(mx,my,C.pink,28,240);
  ring(mx,my,C.pink,60,.5);
- label(mx,my-e.r*1.3-16,becomingMother?"BROOD MOTHER":"OVERDRIVE",C.pink,1.2);
+ label(mx,my-e.r*1.3-16,becomingMother?t("brood_mother_label"):t("overdrive_label"),C.pink,1.2);
 }
 
 // Telegraphs an impending merge before it happens: a line between the
@@ -2371,7 +2679,7 @@ function completeRoom(){
   // existed but nothing ever called it).
   finish(true);
  }else if(wasBoss){
-  mutationChoice(route,"GUARDIAN FELLED — CHOOSE A <span>REWARD</span>");
+  mutationChoice(route,t("guardian_felled_title"));
  }else{
   route();
  }
@@ -2381,9 +2689,12 @@ function completeRoom(){
 // (weapons never count — see MUTATIONS/WEAPONS above). Same trigger, same
 // mechanical win, three very different outcomes.
 const ENDING_TIERS=[
- {max:0,title:"THE SLEEPER <span>WAKES</span>",sub:"Nothing was left to hold your place. The garden opens its eyes for the first time in a very long while — and finds itself alone."},
- {max:3,title:"YOU <span>LEAVE</span>",sub:"The gate remembers you enough to let you through. The world outside is loud, and fast, and none of it makes sense anymore. You'll learn. Probably."},
- {max:Infinity,title:"THE GARDEN <span>KEEPS</span> YOU",sub:"You beat your reflection. It doesn't matter. There was never enough of you left to walk through a door."}
+ {max:0,title:"THE SLEEPER <span>WAKES</span>",sub:"Nothing was left to hold your place. The garden opens its eyes for the first time in a very long while — and finds itself alone.",
+  title_pl:"ŚPIĄCY <span>BUDZI SIĘ</span>",sub_pl:"Nic nie zostało, by trzymać twoje miejsce. Ogród otwiera oczy po raz pierwszy od bardzo dawna — i odnajduje się sam."},
+ {max:3,title:"YOU <span>LEAVE</span>",sub:"The gate remembers you enough to let you through. The world outside is loud, and fast, and none of it makes sense anymore. You'll learn. Probably.",
+  title_pl:"ODCHODZISZ",sub_pl:"Brama pamięta cię na tyle, by cię przepuścić. Świat na zewnątrz jest głośny i szybki, i nic już w nim nie ma sensu. Nauczysz się. Może."},
+ {max:Infinity,title:"THE GARDEN <span>KEEPS</span> YOU",sub:"You beat your reflection. It doesn't matter. There was never enough of you left to walk through a door.",
+  title_pl:"OGRÓD <span>ZATRZYMUJE</span> CIEBIE",sub_pl:"Pokonałeś swoje odbicie. To nie ma znaczenia. Nigdy nie zostało z ciebie dość, by przejść przez drzwi."}
 ];
 
 function finish(win){
@@ -2402,22 +2713,23 @@ function finish(win){
  win?sfx.victory():sfx.death();
 
  const picks=R.mutationPicks||0;
- const ending=win?ENDING_TIERS.find(t=>picks<=t.max):null;
+ const tier=win?ENDING_TIERS.find(tr=>picks<=tr.max):null;
+ const ending=tier?localize(tier):null;
 
  show(
-  win?ending.title:"THE GARDEN <span>RECLAIMS YOU</span>",
-  win?ending.sub:"The expedition ends. Your memories remain.",
+  win?ending.title:t("reclaims_title"),
+  win?ending.sub:t("reclaims_sub"),
   [],
   [
-   {title:"NEW EXPEDITION",fn:frameSelect},
-   {title:"TITLE",secondary:true,fn:title}
+   {title:t("new_expedition"),fn:frameSelect},
+   {title:t("title_btn"),secondary:true,fn:title}
   ],
   `<div class="stats">
-   <div><b>${R.score.toLocaleString()}</b><small>SCORE</small></div>
-   <div><b>${R.kills}</b><small>KILLS</small></div>
-   <div><b>${R.depth}</b><small>ROOMS</small></div>
-   <div><b>${picks}</b><small>MUTATIONS</small></div>
-   <div><b>+${sporesEarned}</b><small>SPORES</small></div>
+   <div><b>${R.score.toLocaleString()}</b><small>${t("stat_score")}</small></div>
+   <div><b>${R.kills}</b><small>${t("stat_kills")}</small></div>
+   <div><b>${R.depth}</b><small>${t("stat_rooms")}</small></div>
+   <div><b>${picks}</b><small>${t("stat_mutations")}</small></div>
+   <div><b>+${sporesEarned}</b><small>${t("stat_spores")}</small></div>
   </div>`
  );
 
@@ -2548,7 +2860,7 @@ function drawHazards(){
       circle(h.x,h.y,h.r,C.pink,2);
 
       text(
-        active?"SLOW":"WARNING",
+        active?t("hazard_slow"):t("hazard_warning"),
         h.x,h.y,12,C.pink,"center"
       );
     }
@@ -2569,7 +2881,7 @@ function drawHazards(){
         circle(h.x,h.y,h.r*(1.2-progress*.2),C.gold,2);
 
         ctx.globalAlpha=.8;
-        text("MOVE",h.x,h.y,13,C.gold,"center");
+        text(t("hazard_move"),h.x,h.y,13,C.gold,"center");
       }else{
         // Brief expanding blast animation.
         const blastProgress=clamp(
@@ -2896,20 +3208,20 @@ function drawHUD(){
 
  if(!R)return;
 
- text(`${R.scrap} SCRAP · ${R.score} SCORE`,24,55,12,C.gold);
- text(`LEVEL ${R.level}`,24,81,11,C.mint);
+ text(`${R.scrap} ${t("scrap_suffix")} · ${R.score} ${t("score_label")}`,24,55,12,C.gold);
+ text(`${t("level_label")} ${R.level}`,24,81,11,C.mint);
  bar(90,78,220,5,R.xp/xpNeeded(),C.mint);
 
- text("INTEGRITY",600,25,11,C.muted,"center");
+ text(t("hud_integrity"),600,25,11,C.muted,"center");
 drawPlayerShards();
- text(`ROOM ${R.depth+1} · KILLS ${R.kills}`,W-24,27,14,C.white,"right");
+ text(`${t("room_label")} ${R.depth+1} · ${t("kills_suffix")} ${R.kills}`,W-24,27,14,C.white,"right");
 
  if(room){
   const objective=room.type==="endless"
-   ?`ENDLESS ${room.kills}/${room.target}`
+   ?`${t("hud_endless")} ${room.kills}/${room.target}`
    :room.type==="boss"
-   ?"GUARDIAN"
-   :`WAVE ${room.wave}/${room.maxWaves}`;
+   ?t("hud_guardian")
+   :`${t("hud_wave")} ${room.wave}/${room.maxWaves}`;
 
   text(objective,W-24,55,11,C.pink,"right");
  }
@@ -2937,25 +3249,25 @@ drawPlayerShards();
    btnPulse.style.setProperty("--ready",Math.min(1,P.energy/S.pulseCost));
    btnPulse.classList.toggle("ready",pulseReady);
   }else{
-   text("[SPACE] DASH",24,H-48,12,P.dashCD<=0?C.mint:C.muted);
+   text(`[SPACE] ${t("dash_short")}`,24,H-48,12,P.dashCD<=0?C.mint:C.muted);
 
    bar(24,H-28,195,6,1-P.dashCD/S.dashCD,C.mint);
 
    text(
-     P.dashCD<=0?"READY":P.dashCD.toFixed(1)+"s",
+     P.dashCD<=0?t("hud_ready"):P.dashCD.toFixed(1)+"s",
      230,
      H-26,
      10,
      C.mint
    );
 
-   text("[E] PULSE",330,H-48,12,P.energy>=S.pulseCost?C.gold:C.muted);
+   text(`[E] ${t("pulse_short")}`,330,H-48,12,P.energy>=S.pulseCost?C.gold:C.muted);
 
    bar(330,H-28,195,6,P.energy/S.pulseCost,C.gold);
 
    text(
      P.energy>=S.pulseCost
-       ?"READY"
+       ?t("hud_ready")
        :Math.floor(P.energy/S.pulseCost*100)+"%",
      535,
      H-26,
@@ -2972,8 +3284,8 @@ function drawUpgradeBar(){
  if(!R)return;
 
  const owned=[
-  ...MUTATIONS.filter(m=>rank(m.id)>0).map(m=>({label:`${m.name.split(" ")[0]} ${rank(m.id)}`,color:C.mint})),
-  ...WEAPONS.filter(w=>weaponRank(w.id)>0).map(w=>({label:`${w.name.split(" ")[0]} ${weaponRank(w.id)}`,color:C.gold}))
+  ...MUTATIONS.filter(m=>rank(m.id)>0).map(m=>({label:`${localize(m).name.split(" ")[0]} ${rank(m.id)}`,color:C.mint})),
+  ...WEAPONS.filter(w=>weaponRank(w.id)>0).map(w=>({label:`${localize(w).name.split(" ")[0]} ${weaponRank(w.id)}`,color:C.gold}))
  ];
 
  if(!owned.length)return;
@@ -3123,21 +3435,21 @@ function pulse(){
   }
  }
 
- label(P.x,P.y-45,"PULSE",C.gold,.8);
+ label(P.x,P.y-45,t("pulse_label"),C.gold,.8);
 }
 
 function pause(){
  if(state!=="playing")return;
 
  sfx.pause();
- show("TAKE <span>ROOT</span>",
-  "The room is paused. Your cooldowns do not refill while paused.",
+ show(t("take_root_title"),
+  t("take_root_sub"),
   [],
   [
-   {title:"RESUME",fn:hide},
-   {title:"BUILD",secondary:true,fn:build},
-   {title:muted?"SOUND: OFF":"SOUND: ON",secondary:true,fn:()=>{toggleMute();pause();}},
-   {title:"ABANDON",secondary:true,fn:()=>finish(false)}
+   {title:t("resume"),fn:hide},
+   {title:t("build_btn"),secondary:true,fn:build},
+   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();pause();}},
+   {title:t("abandon"),secondary:true,fn:()=>finish(false)}
   ]);
 }
 
