@@ -61,10 +61,24 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
 .stats b{display:block;color:var(--mint);font:700 25px monospace}
 .stats small{color:var(--muted);font-size:10px}
 .badge{display:inline-block;padding:5px 9px;margin:3px;background:#243727;color:var(--gold);font:11px monospace}
+.pathmap{display:flex;justify-content:center;align-items:center;gap:5px;flex-wrap:wrap;margin:18px 0 -4px}
+.pn{display:flex;gap:2px;padding:3px;border:1px solid #223140;border-radius:4px;background:#0c1422a0}
+.pn.now{border-color:var(--mint)}
+.pn.done .pn-opt{opacity:.22}
+.pn.done .pn-opt.picked{opacity:1}
+.pn.next .pn-opt{opacity:.5}
+.pn.now .pn-opt{opacity:.9}
+.pn.boss{margin-left:3px}
+.pn-opt{width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 8px monospace;border:1px solid var(--c);color:var(--c);background:transparent}
+.pn-opt.picked{background:var(--c);color:#04121b}
+.pn.boss .pn-opt{width:19px;height:19px;font-size:10px}
 @media(max-width:700px){
  .cards{gap:7px}.card{padding:12px;min-height:140px}
  .card h3{font-size:14px}.card p{font-size:10px}.sub{font-size:11px}
  .button{padding:9px 12px;font-size:10px}
+ .pathmap{margin:12px 0 -2px}
+ .pn-opt{width:12px;height:12px;font-size:7px}
+ .pn.boss .pn-opt{width:15px;height:15px;font-size:8px}
 }
 </style>
 </head>
@@ -580,7 +594,8 @@ function help(){
   [
    {title:"DASH",tag:isTouch?"BUTTON":"SPACE",desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",foot:"Cooldown: roughly 2.3–3.3 seconds."},
    {title:"PULSE",tag:isTouch?"BUTTON":"E",desc:"Clears bullets and damages nearby enemies.",foot:"Recharge is intentionally slow."},
-   {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, stars snipe, rings summon.",foot:"Health shards show remaining HP."}
+   {title:"ENEMIES",tag:"READ",desc:"Triangles rush, squares shoot, diamonds charge, stars snipe, rings summon.",foot:"Health shards show remaining HP."},
+   {title:"PATH MAP",tag:"READ",desc:"The row above your choices previews the whole floor. Filled icons are rooms you've resolved; outlined icons are still open.",foot:"C combat · E elite · R rest · $ shop · ? unknown · G guardian"}
   ],
   [{title:"BACK",fn:title}]);
 }
@@ -621,9 +636,13 @@ const NODE_INFO={
  unknown:{title:"UNKNOWN",tag:"???",desc:"An uncertain encounter. Could be a blessing, could cost you.",fn:unknownEvent}
 };
 
+const NODE_COLOR={combat:"var(--ink)",elite:"var(--pink)",rest:"var(--mint)",shop:"var(--gold)",unknown:"var(--violet)"};
+const NODE_LETTER={combat:"C",elite:"E",rest:"R",shop:"$",unknown:"?"};
+
 function generateActMap(){
  const pool=["elite","rest","shop","unknown"];
  R.actMap=[];
+ R.actPicks=[];
 
  for(let i=0;i<6;i++){
   R.actMap.push(["combat",...shuffle(pool).slice(0,2)]);
@@ -632,12 +651,22 @@ function generateActMap(){
  R.mapAct=Math.floor(R.depth/7);
 }
 
-function pathPreview(){
- const idx=R.depth%7;
- if(idx+1>=6)return " · NEXT: GUARDIAN";
+function pathMapHTML(){
+ if(!R.actMap)return "";
 
- const next=R.actMap[idx+1].map(id=>NODE_INFO[id].title).join(" / ");
- return ` · NEXT: ${next}`;
+ const cur=R.depth%7;
+ const cells=R.actMap.map((opts,i)=>{
+  const st=i<cur?"done":i===cur?"now":"next";
+  const pick=R.actPicks&&R.actPicks[i];
+  const opts_html=opts.map(id=>
+   `<span class="pn-opt${pick===id?" picked":""}" style="--c:${NODE_COLOR[id]}">${NODE_LETTER[id]}</span>`
+  ).join("");
+  return `<div class="pn ${st}">${opts_html}</div>`;
+ }).join("");
+
+ const bossState=cur>=6?"now":"next";
+
+ return `<div class="pathmap">${cells}<div class="pn boss ${bossState}"><span class="pn-opt picked" style="--c:var(--pink)">G</span></div></div>`;
 }
 
 function route(){
@@ -647,14 +676,13 @@ function route(){
  const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
  const boss=bossDepthAhead()?BOSSES[Math.floor(R.depth/7)]:null;
 
- let cards,preview;
+ let cards;
 
  if(boss){
   cards=[
    {title:"BOSS",tag:"GUARDIAN",desc:`${boss.name} blocks the way into the next biome.`,fn:()=>enter("boss")},
    {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
   ];
-  preview="";
  }else{
   if(R.mapAct!==Math.floor(R.depth/7))generateActMap();
 
@@ -662,7 +690,6 @@ function route(){
    const info=NODE_INFO[id];
    return {title:info.title,tag:typeof info.tag==="function"?info.tag():info.tag,desc:info.desc,fn:info.fn};
   });
-  preview=pathPreview();
  }
 
  show(`${biome.name.split(" ")[0]} <span>${biome.name.split(" ").slice(1).join(" ")}</span>`,
@@ -672,16 +699,18 @@ function route(){
    {title:"BUILD",secondary:true,fn:build},
    {title:"TITLE",secondary:true,fn:title}
   ],
-  `<div class="small">ROOM ${R.depth+1} · LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · SCORE ${R.score}${preview}</div>`);
+  `${pathMapHTML()}<div class="small">ROOM ${R.depth+1} · LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · SCORE ${R.score}</div>`);
 }
 
 function rest(){
+ if(R.actPicks)R.actPicks[R.depth%7]="rest";
  R.depth++;
  heal(Math.ceil(S.maxHp*.35));
  mutationChoice(route,"REST — CHOOSE A <span>MUTATION</span>");
 }
 
 function unknownEvent(){
+ if(R.actPicks)R.actPicks[R.depth%7]="unknown";
  R.depth++;
 
  const roll=Math.random();
@@ -1637,6 +1666,7 @@ function update(dt){
 function completeRoom(){
  const wasBoss=room.type==="boss";
 
+ if(R.actPicks&&(room.type==="combat"||room.type==="elite"))R.actPicks[R.depth%7]=room.type;
  R.depth++;
  R.score+=room.type==="elite"?900:wasBoss?1500:450;
  R.scrap+=room.type==="elite"?50:wasBoss?100:25;
