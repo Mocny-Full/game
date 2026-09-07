@@ -23,10 +23,28 @@ body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;overflow:auto;background:#040914e8;backdrop-filter:blur(8px);touch-action:auto;z-index:5}
 #overlay.hidden{display:none}
-#rotateHint{position:fixed;top:0;left:0;right:0;padding:calc(6px + env(safe-area-inset-top,0px)) 10px 6px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;z-index:20;display:none}
+/* Stacks as normal flow inside a single fixed column so #rotateHint and
+   #a2hsHint (below) never need to know about each other's height. The
+   safe-area inset lives on the shared container so whichever hint ends up
+   visually first still clears the notch/status bar. */
+#hintStack{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;flex-direction:column;
+ padding-top:env(safe-area-inset-top,0px)}
+#rotateHint{padding:6px 10px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;display:none}
 @media(orientation:portrait) and (pointer:coarse){
  #rotateHint{display:block}
 }
+/* iPhone Safari has no Fullscreen API for regular page content (only
+   iPadOS and Android do), so requestFullscreen() silently no-ops there.
+   The only genuine fullscreen/no-chrome experience on iPhone is launching
+   from a Home Screen icon (already supported via the apple-mobile-web-app
+   meta tags above) — this banner is the fallback nudge toward that, shown
+   only when the real API is unavailable. */
+#a2hsHint{position:relative;display:none;padding:6px 34px 6px 10px;
+ background:#1a1428cc;color:var(--violet);font:600 11px monospace;text-align:center}
+#a2hsHint.show{display:block}
+#a2hsHint button{position:absolute;top:2px;right:6px;
+ width:22px;height:22px;border:1px solid var(--violet);background:transparent;color:var(--violet);
+ font:700 12px monospace;line-height:1;border-radius:50%;cursor:pointer;padding:0}
 /* #touch spans the full viewport (not just #stage) so controls can live in
    the letterbox bars beside the stage instead of covering the play field. */
 #touch{position:fixed;inset:0;display:none;touch-action:none;z-index:4;pointer-events:none}
@@ -130,7 +148,10 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
 </style>
 </head>
 <body>
+<div id="hintStack">
 <div id="rotateHint">ROTATE TO LANDSCAPE FOR THE BEST EXPERIENCE</div>
+<div id="a2hsHint"><span id="a2hsText"></span><button type="button" id="a2hsClose">×</button></div>
+</div>
 <div id="stage">
 <canvas id="game"></canvas>
 <div id="overlay"></div>
@@ -167,6 +188,16 @@ const touchUI=document.querySelector("#touch");
 // invoke() rather than on load. Stops retrying once the player has
 // actually left fullscreen once, so it doesn't keep re-prompting after
 // they deliberately back out.
+//
+// iPhone Safari has no Fullscreen API for ordinary page content at all
+// (requestFullscreen/webkitRequestFullscreen are both undefined there —
+// iPadOS and Android support it fine), so this silently does nothing on
+// an iPhone in a regular browser tab. The only genuine chrome-free
+// experience on iPhone is launching from a Home Screen icon, which the
+// apple-mobile-web-app meta tags above already support — see the
+// a2hsHint banner below for the fallback nudge toward that.
+const hasFullscreenAPI=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+const isStandalone=navigator.standalone===true||matchMedia("(display-mode: standalone)").matches;
 let fsEntered=false,fsDeclined=false;
 function enterFullscreen(){
  if(!isTouch||fsDeclined||document.fullscreenElement)return;
@@ -183,6 +214,24 @@ function onFullscreenChange(){
 }
 document.addEventListener("fullscreenchange",onFullscreenChange);
 document.addEventListener("webkitfullscreenchange",onFullscreenChange);
+
+// Nudge iPhone Safari users (the one case with no real fullscreen option)
+// toward Add to Home Screen instead. Dismissed once, remembered forever —
+// read/write/t/UI are all defined further down, but this only ever runs
+// from maybeShowA2hsHint() below, called after the whole script has run.
+const a2hsHint=document.querySelector("#a2hsHint");
+const a2hsText=document.querySelector("#a2hsText");
+const A2HS_DISMISSED_KEY="void-bloom-a2hs-dismissed";
+function maybeShowA2hsHint(){
+ if(!isTouch||isStandalone||hasFullscreenAPI||read(A2HS_DISMISSED_KEY,false))return;
+ a2hsText.textContent=t("a2hs_hint");
+ a2hsHint.classList.add("show");
+}
+document.querySelector("#a2hsClose").addEventListener("click",()=>{
+ a2hsHint.classList.remove("show");
+ write(A2HS_DISMISSED_KEY,true);
+});
+
 const joyZone=document.querySelector("#joyZone");
 const joyBase=document.querySelector("#joyBase");
 const joyKnob=document.querySelector("#joyKnob");
@@ -268,6 +317,9 @@ let lang=read("void-bloom-lang","en");
 function setLang(l){
  lang=l;
  write("void-bloom-lang",l);
+ // The a2hs hint lives outside the show()-driven overlay system, so it
+ // needs its own refresh when the language changes while it's visible.
+ if(a2hsHint&&a2hsHint.classList.contains("show"))a2hsText.textContent=t("a2hs_hint");
 }
 // t(key) looks up a short structural UI string; content data (mutations,
 // bosses, notes, etc.) carries its own per-language fields instead, merged
@@ -372,7 +424,8 @@ const UI={
   pulse_label:"PULSE",
   show_hint_touch:"TAP TO CHOOSE · LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS · II PAUSE",
   show_hint_keys:"CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE",
-  choice_fallback:"CHOICE"
+  choice_fallback:"CHOICE",
+  a2hs_hint:"TIP: ADD TO HOME SCREEN FOR TRUE FULLSCREEN"
  },
  pl:{
   new_expedition:"NOWA WYPRAWA",the_garden:"OGRÓD",how_to_play:"JAK GRAĆ",
@@ -455,7 +508,8 @@ const UI={
   pulse_label:"PULS",
   show_hint_touch:"DOTKNIJ, BY WYBRAĆ · DŻOJSTIK PO LEWEJ · PRZYCISKI UNIKU / PULSU · II PAUZA",
   show_hint_keys:"KLIKNIJ LUB WCIŚNIJ CYFRY · WASD / STRZAŁKI RUCH · SPACJA UNIK · E PULS · P PAUZA",
-  choice_fallback:"WYBÓR"
+  choice_fallback:"WYBÓR",
+  a2hs_hint:"WSKAZÓWKA: DODAJ DO EKRANU GŁÓWNEGO DLA PEŁNEGO EKRANU"
  }
 };
 
@@ -3499,6 +3553,7 @@ function frame(now){
 }
 
 title();
+maybeShowA2hsHint();
 requestAnimationFrame(frame);
 })();
 </script>
