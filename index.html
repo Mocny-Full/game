@@ -1906,7 +1906,9 @@ function updateEnemy(e,dt){
 
  const a=angle(e,P);
  const n=distance(e,P);
- const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?2:1);
+ // Tanks are the slowest thing in the roster, so their overdrive form
+ // triples speed instead of doubling — everyone else stays at 2x.
+ const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:2):1);
 
  if(e.type==="charger"){
   if(e.charge>0){
@@ -2070,12 +2072,14 @@ function updateMerging(dt){
 
   if(partner){
    e.mergeTimer=(e.mergeTimer||0)+dt;
+   e.mergeWith=partner;
 
    if(e.mergeTimer>=MERGE_TIME&&!e.dead&&!partner.dead){
     mergeEnemies(e,partner);
    }
   }else{
    e.mergeTimer=Math.max(0,(e.mergeTimer||0)-dt*2);
+   e.mergeWith=null;
   }
  }
 }
@@ -2091,7 +2095,7 @@ function mergeEnemies(e,partner){
   hp:mergedHp,maxHp:mergedHp,
   r:e.r*1.3,
   elite:e.elite||partner.elite,
-  born:.4,dead:false,overdrive:true,mergeTimer:0,
+  born:.4,dead:false,overdrive:true,mergeTimer:0,mergeWith:null,
   hit:0,orbitHit:0,slow:0,burn:0,age:0,
   tell:0,charge:0,fire:random(.3,.9)
  };
@@ -2104,6 +2108,33 @@ function mergeEnemies(e,partner){
  burst(mx,my,C.pink,28,240);
  ring(mx,my,C.pink,60,.5);
  label(mx,my-e.r*1.3-16,"OVERDRIVE",C.pink,1.2);
+}
+
+// Telegraphs an impending merge before it happens: a line between the
+// pairing enemies that thickens/brightens with progress, plus a pulsing
+// ring once they're past the halfway point — so a merge is something the
+// player can see coming and react to, not a surprise.
+function drawMergeTelegraphs(){
+ for(const e of enemies){
+  if(e.dead||!e.mergeWith||e.mergeWith.dead||!e.mergeTimer)continue;
+
+  const progress=Math.min(1,e.mergeTimer/MERGE_TIME);
+  const partner=e.mergeWith;
+
+  ctx.save();
+  ctx.globalAlpha=.2+progress*.6;
+  if(progress<1)ctx.setLineDash([6,6]);
+  line(e.x,e.y,partner.x,partner.y,C.pink,2+progress*4);
+  ctx.restore();
+
+  if(progress>.5){
+   const pulse=.6+Math.sin(visual*10)*.4;
+   ctx.save();
+   ctx.globalAlpha=(progress-.5)*2*pulse;
+   circle(e.x,e.y,e.r+10,C.pink,2);
+   ctx.restore();
+  }
+ }
 }
 
 function update(dt){
@@ -2884,6 +2915,7 @@ function draw(){
  drawHazards();
 
  for(const o of orbs)circle(o.x,o.y,4,C.mint);
+ drawMergeTelegraphs();
  for(const e of enemies)drawEnemy(e);
 
  for(const b of bullets){
