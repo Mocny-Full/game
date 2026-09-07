@@ -178,6 +178,156 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({
 const read=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))??f}catch{return f}};
 const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 
+const MASTER_VOLUME=.35;
+let muted=read("void-bloom-muted",false);
+let audioCtx=null,masterGain=null,noiseBuffer=null,ambientNodes=null;
+
+function ensureAudio(){
+ if(audioCtx)return audioCtx;
+
+ try{
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=muted?0:MASTER_VOLUME;
+  masterGain.connect(audioCtx.destination);
+ }catch{
+  audioCtx=false;
+ }
+
+ return audioCtx;
+}
+
+function wakeAudio(){
+ const ctx=ensureAudio();
+ if(ctx&&ctx.state==="suspended")ctx.resume();
+}
+
+function toggleMute(){
+ muted=!muted;
+ write("void-bloom-muted",muted);
+ if(masterGain)masterGain.gain.value=muted?0:MASTER_VOLUME;
+}
+
+function tone(freq,duration,type="sine",vol=1,freqEnd=null,startDelay=0){
+ const ctx=ensureAudio();
+ if(!ctx)return;
+
+ const t0=ctx.currentTime+startDelay;
+ const osc=ctx.createOscillator();
+ const gain=ctx.createGain();
+
+ osc.type=type;
+ osc.frequency.setValueAtTime(freq,t0);
+ if(freqEnd)osc.frequency.exponentialRampToValueAtTime(Math.max(1,freqEnd),t0+duration);
+
+ gain.gain.setValueAtTime(vol,t0);
+ gain.gain.exponentialRampToValueAtTime(.001,t0+duration);
+
+ osc.connect(gain);
+ gain.connect(masterGain);
+ osc.start(t0);
+ osc.stop(t0+duration);
+}
+
+function getNoiseBuffer(ctx){
+ if(!noiseBuffer){
+  noiseBuffer=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);
+  const data=noiseBuffer.getChannelData(0);
+  for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+ }
+ return noiseBuffer;
+}
+
+function noiseBurst(duration,vol=1,filterFreq=1000,filterType="lowpass"){
+ const ctx=ensureAudio();
+ if(!ctx)return;
+
+ const t0=ctx.currentTime;
+ const src=ctx.createBufferSource();
+ const filter=ctx.createBiquadFilter();
+ const gain=ctx.createGain();
+
+ src.buffer=getNoiseBuffer(ctx);
+ filter.type=filterType;
+ filter.frequency.value=filterFreq;
+
+ gain.gain.setValueAtTime(vol,t0);
+ gain.gain.exponentialRampToValueAtTime(.001,t0+duration);
+
+ src.connect(filter);
+ filter.connect(gain);
+ gain.connect(masterGain);
+ src.start(t0);
+ src.stop(t0+duration);
+}
+
+const sfx={
+ click(){tone(700,.04,"square",.06)},
+ shoot(){tone(820+random(-40,40),.045,"square",.045,600)},
+ hit(){tone(140,.16,"sawtooth",.22,55);noiseBurst(.1,.12,350)},
+ enemyDeath(){tone(320,.12,"triangle",.14,70)},
+ dash(){noiseBurst(.15,.18,2200,"highpass")},
+ pulse(){tone(90,.4,"sine",.28,280);noiseBurst(.3,.18,1500)},
+ blast(){noiseBurst(.4,.32,300);tone(60,.4,"sine",.28,28)},
+ wave(){tone(220,.1,"sawtooth",.1,140)},
+ levelUp(){tone(523,.12,"sine",.16);tone(659,.12,"sine",.16,null,.09);tone(784,.22,"sine",.2,null,.18)},
+ roomClear(){tone(392,.15,"triangle",.18);tone(523,.15,"triangle",.18,null,.12);tone(659,.25,"triangle",.22,null,.24)},
+ victory(){tone(392,.16,"triangle",.2);tone(523,.16,"triangle",.2,null,.13);tone(659,.16,"triangle",.2,null,.26);tone(784,.4,"triangle",.25,null,.39)},
+ death(){tone(200,.8,"sawtooth",.28,35)},
+ purchase(){tone(600,.06,"sine",.14);tone(900,.1,"sine",.14,null,.06)},
+ pause(){tone(400,.08,"sine",.09)}
+};
+
+function startAmbient(){
+ const ctx=ensureAudio();
+ if(!ctx||ambientNodes)return;
+
+ const osc1=ctx.createOscillator();
+ const osc2=ctx.createOscillator();
+ const filter=ctx.createBiquadFilter();
+ const gain=ctx.createGain();
+ const lfo=ctx.createOscillator();
+ const lfoGain=ctx.createGain();
+
+ osc1.type="sine";osc1.frequency.value=55;
+ osc2.type="sine";osc2.frequency.value=55*1.5;
+ filter.type="lowpass";filter.frequency.value=300;
+ gain.gain.value=0;
+ gain.gain.linearRampToValueAtTime(.05,ctx.currentTime+2);
+
+ lfo.frequency.value=.05;
+ lfoGain.gain.value=150;
+ lfo.connect(lfoGain);
+ lfoGain.connect(filter.frequency);
+
+ osc1.connect(filter);
+ osc2.connect(filter);
+ filter.connect(gain);
+ gain.connect(masterGain);
+
+ osc1.start();
+ osc2.start();
+ lfo.start();
+
+ ambientNodes={osc1,osc2,lfo,gain};
+}
+
+function stopAmbient(){
+ if(!ambientNodes||!audioCtx)return;
+
+ const {osc1,osc2,lfo,gain}=ambientNodes;
+ const t=audioCtx.currentTime;
+
+ gain.gain.cancelScheduledValues(t);
+ gain.gain.setValueAtTime(gain.gain.value,t);
+ gain.gain.linearRampToValueAtTime(0,t+1);
+ osc1.stop(t+1.1);
+ osc2.stop(t+1.1);
+ lfo.stop(t+1.1);
+
+ ambientNodes=null;
+}
+
 const META="void-bloom-meta-final-v2";
 let meta=read(META,{best:0,wins:0,spores:0,upgrades:{}});
 meta.spores=meta.spores||0;
@@ -333,6 +483,8 @@ function show(title,sub,cards=[],buttons=[],extra=""){
 function invoke(i){
  const fn=actions[i];
  if(typeof fn!=="function")return;
+ wakeAudio();
+ sfx.click();
  actions=[];
  fn();
 }
@@ -348,6 +500,7 @@ function hide(){
 function title(){
  R=null;S=null;P=null;room=null;
  enemies=[];bullets=[];orbs=[];hazards=[];
+ stopAmbient();
 
  show("VOID BLOOM<br><span>ECHOES</span>",
   "The garden has learned to punish hesitation.<br><b>Dash and pulse are emergency tools, not permanent movement abilities.</b>",
@@ -355,7 +508,8 @@ function title(){
   [
    {title:"NEW EXPEDITION",fn:frameSelect},
    {title:"THE GARDEN",secondary:true,fn:garden},
-   {title:"HOW TO PLAY",secondary:true,fn:help}
+   {title:"HOW TO PLAY",secondary:true,fn:help},
+   {title:muted?"SOUND: OFF":"SOUND: ON",secondary:true,fn:()=>{toggleMute();title();}}
   ],
   `<div class="small">BEST ${meta.best.toLocaleString()} · ${meta.wins} VICTORIES · ${meta.spores} SPORES<br>
   ${isTouch?"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS":"SPACE DASH · E PULSE · WASD / ARROWS MOVE"}</div>`);
@@ -381,6 +535,7 @@ function garden(){
      meta.spores-=cost;
      meta.upgrades[u.id]=r+1;
      write(META,meta);
+     sfx.purchase();
      garden();
     }
    };
@@ -486,6 +641,7 @@ function startCombat(){
   fire:0,inv:1,
   hits:new Set(),orbit:0,wake:0
  };
+ startAmbient();
  hide();
 }
 
@@ -522,6 +678,7 @@ function shop(){
     fn:()=>{
      R.scrap-=repairCost;
      heal(S.maxHp);
+     sfx.purchase();
      shop();
     }
    },
@@ -534,6 +691,7 @@ function shop(){
     fn:()=>{
      R.scrap-=rerollCost;
      R.rerolls++;
+     sfx.purchase();
      shop();
     }
    },
@@ -550,6 +708,7 @@ function shop(){
      if(mut.id==="armor")heal(2);
      const remaining=MUTATIONS.filter(x=>rank(x.id)<x.max);
      shopStock.mutation=remaining.length?choose(remaining).id:null;
+     sfx.purchase();
      shop();
     }
    }:{
@@ -568,6 +727,7 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
 
  if(!pool.length){
   heal(2);
+  sfx.levelUp();
   show("FULLY <span>BLOOMED</span>",
    "Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
    [],
@@ -575,6 +735,7 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
   return;
  }
 
+ sfx.levelUp();
  show(title,
   "Read the cards. Your build is the main source of power.",
   pool.map(m=>({
@@ -642,6 +803,7 @@ function spawn(type,x,y,elite=false){
 
 function wave(){
  room.wave++;
+ sfx.wave();
 
  let count=13+room.wave*4+Math.floor(R.depth*.8);
  if(room.type==="elite")count+=9;
@@ -705,6 +867,7 @@ function updateHazards(dt){
           }
         }
 
+        sfx.blast();
         ring(h.x,h.y,C.gold,h.r*1.5,.35);
         burst(h.x,h.y,C.gold,30,260);
         shake=7;
@@ -812,6 +975,7 @@ function firePlayer(){
   bullet(P.x,P.y,P.angle+spread,760,true,S.damage);
  }
 
+ sfx.shoot();
  P.fire=S.rate;
 }
 
@@ -864,6 +1028,7 @@ function damageEnemy(e,damage){
  // Pulse does not recharge from ordinary kills anymore.
  orbs.push({x:e.x,y:e.y,value:e.xp});
 
+ sfx.enemyDeath();
  burst(e.x,e.y,e.color,14,160);
 
  if(room.type==="endless"&&room.kills%25===0){
@@ -877,6 +1042,7 @@ function hurt(){
  R.hp--;
  P.inv=1.1;
  shake=8;
+ sfx.hit();
 
  if(R.hp<=0)finish(false);
 }
@@ -1126,6 +1292,7 @@ function completeRoom(){
  R.depth++;
  R.score+=room.type==="elite"?900:450;
  R.scrap+=room.type==="elite"?50:25;
+ sfx.roomClear();
 
  room=null;
  P=null;
@@ -1144,6 +1311,9 @@ function finish(win){
  const sporesEarned=Math.floor(R.score/100)+R.depth;
  meta.spores+=sporesEarned;
  write(META,meta);
+
+ stopAmbient();
+ win?sfx.victory():sfx.death();
 
  show(
   win?"THE GARDEN <span>BREAKS</span>":"THE GARDEN <span>RECLAIMS YOU</span>",
@@ -1714,12 +1884,16 @@ function dash(){
  P.dash=.17;
  P.dashCD=S.dashCD;
  P.hits.clear();
+ wakeAudio();
+ sfx.dash();
 }
 
 function pulse(){
  if(state!=="playing"||!P||P.energy<S.pulseCost)return;
 
  P.energy=0;
+ wakeAudio();
+ sfx.pulse();
 
  for(const b of bullets){
   if(!b.good)b.dead=true;
@@ -1737,12 +1911,14 @@ function pulse(){
 function pause(){
  if(state!=="playing")return;
 
+ sfx.pause();
  show("TAKE <span>ROOT</span>",
   "The room is paused. Your cooldowns do not refill while paused.",
   [],
   [
    {title:"RESUME",fn:hide},
    {title:"BUILD",secondary:true,fn:build},
+   {title:muted?"SOUND: OFF":"SOUND: ON",secondary:true,fn:()=>{toggleMute();pause();}},
    {title:"ABANDON",secondary:true,fn:()=>finish(false)}
   ]);
 }
