@@ -1577,13 +1577,17 @@ function damageEnemy(e,damage){
  room.kills++;
  R.score+=e.elite?160:85;
 
- // Wave sizes run into the hundreds per room, so kill-scrap must stay
- // small and mostly-elite or it dwarfs the room-clear/event rewards.
- if(e.elite)R.scrap+=3;
- else if(Math.random()<.25)R.scrap+=1;
+ // Brood-mother spawn is chaff by design — pure threat, no payout, so
+ // "slightly overwhelming" numbers can't be farmed for scrap or XP.
+ if(!e.noReward){
+  // Wave sizes run into the hundreds per room, so kill-scrap must stay
+  // small and mostly-elite or it dwarfs the room-clear/event rewards.
+  if(e.elite)R.scrap+=3;
+  else if(Math.random()<.25)R.scrap+=1;
 
- // Pulse does not recharge from ordinary kills anymore.
- orbs.push({x:e.x,y:e.y,value:e.xp});
+  // Pulse does not recharge from ordinary kills anymore.
+  orbs.push({x:e.x,y:e.y,value:e.xp});
+ }
 
  sfx.enemyDeath();
  burst(e.x,e.y,e.color,14,160);
@@ -1881,6 +1885,26 @@ function updateReflection(e,dt){
  }
 }
 
+function explodeTank(e){
+ const blastR=e.r+60;
+
+ if(distance(e,P)<blastR+P.r){
+  hurt(e.overdrive?4:2);
+ }
+
+ for(const o of enemies){
+  if(o===e||o.dead||o.type==="boss"||o.type==="reflection")continue;
+  if(distance(e,o)<blastR+o.r)damageEnemy(o,40);
+ }
+
+ sfx.blast();
+ burst(e.x,e.y,C.gold,36,300);
+ ring(e.x,e.y,C.gold,blastR,.5);
+ shake=10;
+
+ damageEnemy(e,e.hp);
+}
+
 function updateEnemy(e,dt){
  if(e.dead)return;
 
@@ -1903,6 +1927,39 @@ function updateEnemy(e,dt){
  e.slow=Math.max(0,e.slow-dt);
  e.orbitHit=Math.max(0,e.orbitHit-dt);
  e.hit=Math.max(0,e.hit-dt);
+
+ // A tier-2 "mother" keeps spawning fresh, unmerged chaff of its own type
+ // at a fast clip — they carry no reward (see damageEnemy's noReward
+ // check), so they're pure crowd pressure, not something to farm.
+ if(e.mother){
+  e.motherTimer-=dt;
+
+  if(e.motherTimer<=0){
+   e.motherTimer=random(1.6,2.2);
+
+   for(let i=0;i<2;i++){
+    const child=spawn(e.type,e.x+random(-30,30),e.y+random(-30,30));
+    if(child)child.noReward=true;
+   }
+  }
+ }
+
+ // Tanks are slow but punish camping next to them: 3 continuous seconds
+ // inside the danger zone triggers a self-destructing blast.
+ if(e.type==="tank"){
+  const dangerZone=e.r+60;
+
+  if(distance(e,P)<dangerZone){
+   e.bombTimer=(e.bombTimer||0)+dt;
+
+   if(e.bombTimer>=3){
+    explodeTank(e);
+    return;
+   }
+  }else{
+   e.bombTimer=Math.max(0,(e.bombTimer||0)-dt*2);
+  }
+ }
 
  const a=angle(e,P);
  const n=distance(e,P);
@@ -2050,18 +2107,20 @@ const MELTABLE=["seeker","gunner","charger","tank","sniper","summoner","mite"];
 const MERGE_TIME=5;
 
 // Punishes kiting a whole wave in a circle instead of thinning it out:
-// same-type enemies that stay stacked on each other for MERGE_TIME fuse
-// into one "overdrive" body — double damage, double speed, but not more
-// total HP than either parent had, so a focused player loses nothing by
-// preventing it and an unfocused one trades numbers for a sharper threat.
+// same-type, same-tier enemies that stay stacked on each other for
+// MERGE_TIME fuse into one "overdrive" body — double damage, double
+// speed, but not more total HP than either parent had, so a focused
+// player loses nothing by preventing it and an unfocused one trades
+// numbers for a sharper threat. Two already-merged (tier-1) enemies can
+// merge again into a tier-2 "mother", which cannot merge further.
 function updateMerging(dt){
  for(const e of enemies){
-  if(e.dead||e.born>0||e.overdrive||!MELTABLE.includes(e.type))continue;
+  if(e.dead||e.born>0||e.mother||!MELTABLE.includes(e.type))continue;
 
   let partner=null,bestDist=Infinity;
 
   for(const o of enemies){
-   if(o===e||o.dead||o.born>0||o.overdrive||o.type!==e.type)continue;
+   if(o===e||o.dead||o.born>0||o.mother||o.type!==e.type||o.overdrive!==e.overdrive)continue;
 
    const d=distance(e,o);
    if(d<(e.r+o.r)*.55&&d<bestDist){
@@ -2087,6 +2146,7 @@ function updateMerging(dt){
 function mergeEnemies(e,partner){
  const mergedHp=Math.max(e.hp,partner.hp);
  const mx=(e.x+partner.x)/2,my=(e.y+partner.y)/2;
+ const becomingMother=e.overdrive; // both parents already tier-1
 
  const merged={
   ...e,
@@ -2095,7 +2155,9 @@ function mergeEnemies(e,partner){
   hp:mergedHp,maxHp:mergedHp,
   r:e.r*1.3,
   elite:e.elite||partner.elite,
-  born:.4,dead:false,overdrive:true,mergeTimer:0,mergeWith:null,
+  born:.4,dead:false,overdrive:true,mother:becomingMother,
+  mergeTimer:0,mergeWith:null,
+  motherTimer:becomingMother?1.5:undefined,
   hit:0,orbitHit:0,slow:0,burn:0,age:0,
   tell:0,charge:0,fire:random(.3,.9)
  };
@@ -2107,7 +2169,7 @@ function mergeEnemies(e,partner){
  sfx.overdrive();
  burst(mx,my,C.pink,28,240);
  ring(mx,my,C.pink,60,.5);
- label(mx,my-e.r*1.3-16,"OVERDRIVE",C.pink,1.2);
+ label(mx,my-e.r*1.3-16,becomingMother?"BROOD MOTHER":"OVERDRIVE",C.pink,1.2);
 }
 
 // Telegraphs an impending merge before it happens: a line between the
@@ -2132,6 +2194,29 @@ function drawMergeTelegraphs(){
    ctx.save();
    ctx.globalAlpha=(progress-.5)*2*pulse;
    circle(e.x,e.y,e.r+10,C.pink,2);
+   ctx.restore();
+  }
+ }
+}
+
+function drawBombTelegraphs(){
+ for(const e of enemies){
+  if(e.dead||e.type!=="tank"||!e.bombTimer)continue;
+
+  const progress=Math.min(1,e.bombTimer/3);
+  const dangerZone=e.r+60;
+
+  ctx.save();
+  ctx.globalAlpha=.15+progress*.5;
+  if(progress<1)ctx.setLineDash([5,7]);
+  circle(e.x,e.y,dangerZone,C.gold,2+progress*3);
+  ctx.restore();
+
+  if(progress>.6){
+   const pulse=.5+Math.sin(visual*16)*.5;
+   ctx.save();
+   ctx.globalAlpha=(progress-.6)*2.5*pulse;
+   circle(e.x,e.y,e.r+6,C.gold,3);
    ctx.restore();
   }
  }
@@ -2916,6 +3001,7 @@ function draw(){
 
  for(const o of orbs)circle(o.x,o.y,4,C.mint);
  drawMergeTelegraphs();
+ drawBombTelegraphs();
  for(const e of enemies)drawEnemy(e);
 
  for(const b of bullets){
