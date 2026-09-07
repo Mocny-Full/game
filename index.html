@@ -697,53 +697,97 @@ const MUTATION_DEEP_THRESHOLD=4;
 const MUTATIONS=[
  ["power","Razor Petals",5,"+24% weapon damage.","WEAPON",
   "The petals cut cleaner every time you let them. You almost feel it deciding for you.",
-  "You no longer ask what the blade wants. It already knew what you'd swing at."],
+  "You no longer ask what the blade wants. It already knew what you'd swing at.",
+  "+24% obrażeń broni.",
+  "Płatki tną coraz czyściej za każdym razem, gdy im na to pozwalasz. Prawie czujesz, jak to ono decyduje za ciebie.",
+  "Nie pytasz już, czego chce ostrze. Ono już wiedziało, w co uderzysz."],
  ["rate","Quickening",5,"Fire 16% faster.","WEAPON",
   "Your hands move faster than your thoughts arrive. That used to bother you.",
-  "There's no lag between wanting and doing anymore. There's barely a you in between."],
+  "There's no lag between wanting and doing anymore. There's barely a you in between.",
+  "Strzela 16% szybciej.",
+  "Twoje dłonie poruszają się szybciej, niż nadchodzą myśli. Kiedyś by cię to niepokoiło.",
+  "Nie ma już opóźnienia między chceniem a robieniem. Ledwo jest jakieś \"ty\" pomiędzy."],
  ["spread","Forked Bloom",3,"Add one projectile per rank.","WEAPON",
   "One shot becomes two. The garden likes symmetry. It's teaching you to like it too.",
-  "Everything you make branches now, the way roots branch, the way you branch."],
+  "Everything you make branches now, the way roots branch, the way you branch.",
+  "Dodaje jeden pocisk na rangę.",
+  "Jeden strzał staje się dwoma. Ogród lubi symetrię. Uczy cię lubić ją też.",
+  "Wszystko, co tworzysz, teraz się rozgałęzia — tak jak korzenie, tak jak ty."],
  ["pierce","Needlework",3,"Projectiles pierce more enemies.","WEAPON",
   "The thorn goes all the way through. It never used to. Neither did you, once.",
-  "Nothing stops at one anymore. Not the needle. Not you."],
+  "Nothing stops at one anymore. Not the needle. Not you.",
+  "Pociski przebijają więcej wrogów.",
+  "Cierń przechodzi teraz na wylot. Kiedyś tak nie było. Ty też kiedyś tak nie potrafiłeś.",
+  "Nic już nie zatrzymuje się na jednym. Ani igła. Ani ty."],
  ["speed","Wild Current",3,"+12% movement speed.","MOBILITY",
   "The current is faster than your legs remember being. It isn't unpleasant.",
-  "You've stopped noticing where your feet decide to go without you."],
+  "You've stopped noticing where your feet decide to go without you.",
+  "+12% prędkości ruchu.",
+  "Prąd jest szybszy, niż pamiętają twoje nogi. To nie jest nieprzyjemne.",
+  "Przestałeś zauważać, dokąd twoje stopy decydują się iść bez ciebie."],
  ["dash","Slipstream",4,"Dash cooldown reduced by 10%.","DASH",
   "The gap between one place and the next keeps shrinking. Convenient. Slightly wrong.",
-  "Distance is a suggestion the garden no longer bothers making to you."],
+  "Distance is a suggestion the garden no longer bothers making to you.",
+  "Odnowienie uniku skrócone o 10%.",
+  "Odstęp między jednym miejscem a następnym wciąż się kurczy. Wygodne. Odrobinę niewłaściwe.",
+  "Odległość to sugestia, którą ogród przestał ci już nawet składać."],
  ["wake","Afterimage",3,"Dash leaves damaging blooms.","DASH",
   "You leave more of yourself behind with every step now. Something grows where you were.",
-  "The trail you leave is more you than you are. It's doing fine without the rest of you."],
+  "The trail you leave is more you than you are. It's doing fine without the rest of you.",
+  "Unik zostawia raniące kwiaty.",
+  "Zostawiasz teraz coraz więcej siebie za każdym krokiem. Coś rośnie tam, gdzie byłeś.",
+  "Ślad, który zostawiasz, jest bardziej tobą niż ty sam. Radzi sobie bez reszty ciebie."],
  ["armor","Living Armor",4,"+1 maximum HP and repair 2.","SURVIVAL",
   "The garden mends you before you finish flinching. You didn't ask it to.",
-  "It isn't healing anymore. It's just deciding you were never hurt."],
+  "It isn't healing anymore. It's just deciding you were never hurt.",
+  "+1 maks. HP i naprawia 2.",
+  "Ogród naprawia cię, zanim zdążysz się skrzywić z bólu. Nie prosiłeś go o to.",
+  "To już nie jest leczenie. To po prostu decyzja, że nigdy nie zostałeś zraniony."],
  ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE",
   "Something in your chest learned to push back. It wasn't there before you arrived.",
-  "The pulse doesn't come from you. You just happen to be where it comes out."],
+  "The pulse doesn't come from you. You just happen to be where it comes out.",
+  "Obrażenia pulsu rosną i kosztuje mniej.",
+  "Coś w twojej piersi nauczyło się odpychać. Nie było tego, zanim tu przybyłeś.",
+  "Puls nie pochodzi od ciebie. Po prostu akurat tam wychodzi na zewnątrz."],
  ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE",
   "You feel steadier in the light here. You didn't used to need to.",
-  "You've stopped telling the difference between resting and rooting."],
+  "You've stopped telling the difference between resting and rooting.",
+  "Puls odnawia się szybciej.",
+  "Czujesz się tu pewniej w świetle. Kiedyś tego nie potrzebowałeś.",
+  "Przestałeś odróżniać odpoczynek od zapuszczania korzeni."],
  ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL",
   "Something in your bite runs cold now. You don't remember choosing that.",
-  "You slow everything you touch. The garden calls this mercy."],
+  "You slow everything you touch. The garden calls this mercy.",
+  "Strzały spowalniają wrogów.",
+  "Coś w twoim ukąszeniu jest teraz zimne. Nie pamiętasz, żeby to wybrać.",
+  "Spowalniasz wszystko, czego dotkniesz. Ogród nazywa to litością."],
  ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL",
   "A small fire follows your aim now, patient, like it's been waiting for permission.",
-  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to."]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6]}));
+  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to.",
+  "Strzały podpalają wrogów.",
+  "Mały ogień podąża teraz za twoim celowaniem, cierpliwy, jakby czekał na pozwolenie.",
+  "Nie czujesz już ciepła. Stałeś się czymś, co go nie potrzebuje."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6],
+ desc_pl:x[7],loreEarly_pl:x[8],loreLate_pl:x[9]}));
 
 // Weapons are the player's own — not the garden's to give. They're always
 // bought back with scrap, never handed over for free, and their lore stays
 // one consistent, personal voice rather than drifting like mutations do.
 const WEAPONS=[
  ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL",
-  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly."],
+  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly.",
+  "Krążące ostrza raniące wszystko, czego dotkną.",
+  "Kiedyś twoje — jesteś tego prawie pewien. Krąży teraz wokół ciebie, jakby wciąż czekało, aż ktoś je porządnie podniesie."],
  ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM",
-  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it."],
+  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it.",
+  "Przebijająca wiązka wystrzeliwana w cel co jakiś czas.",
+  "Pamięta kształt twojego uchwytu lepiej niż ty sam. Złom ją odkupił. Złom nie odkupi wspomnienia trzymania jej."],
  ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC",
-  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc."]
-].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5]}));
+  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc.",
+  "Pocisk, który po trafieniu przeskakuje na innego pobliskiego wroga.",
+  "Kiedyś skakała między twoimi dłońmi — sztuczka, którą znałeś, zanim poznałeś cokolwiek innego. Część ciebie wciąż jest w tym łuku."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5],
+ desc_pl:x[6],lore_pl:x[7]}));
 
 // Notes are physical scraps of memory belonging to the garden's other
 // inhabitants — sometimes the player's own life before arriving, sometimes
@@ -1313,8 +1357,8 @@ function shop(){
   mut?{
    title:mut.name,
    tag:`${mutCost} ${t("scrap_suffix")}`,
-   desc:mut.desc,
-   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?mut.loreLate:mut.loreEarly,
+   desc:localize(mut).desc,
+   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?localize(mut).loreLate:localize(mut).loreEarly,
    foot:`${t("rank_label")} ${rank(mut.id)+1}/${mut.max}`,
    disabled:R.scrap<mutCost,
    fn:()=>{
@@ -1342,8 +1386,8 @@ function shop(){
   cards.push({
    title:wep.name,
    tag:wepRank===0?`${wepCost} ${t("scrap_suffix")} · ${t("new_suffix")}`:`${wepCost} ${t("scrap_suffix")}`,
-   desc:wep.desc,
-   lore:wep.lore,
+   desc:localize(wep).desc,
+   lore:localize(wep).lore,
    foot:`${t("rank_label")} ${wepRank+1}/${wep.max}`,
    disabled:R.scrap<wepCost,
    fn:()=>{
@@ -1409,12 +1453,13 @@ function mutationChoice(done,title=null){
   t("mutation_sub"),
   pool.map(m=>{
    const current=rank(m.id);
+   const lm=localize(m);
 
    return {
     title:m.name,
     tag:m.tag,
-    desc:m.desc,
-    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?m.loreLate:m.loreEarly,
+    desc:lm.desc,
+    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?lm.loreLate:lm.loreEarly,
     foot:`${t("rank_label")} ${current+1}/${m.max}`,
     fn:()=>{
      R.mods[m.id]=current+1;
