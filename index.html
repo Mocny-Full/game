@@ -605,6 +605,33 @@ function begin(frame){
  }
 }
 
+const NODE_INFO={
+ combat:{title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
+ elite:{title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
+ rest:{title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
+ shop:{title:"SHOP",tag:()=>`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop},
+ unknown:{title:"UNKNOWN",tag:"???",desc:"An uncertain encounter. Could be a blessing, could cost you.",fn:unknownEvent}
+};
+
+function generateActMap(){
+ const pool=["elite","rest","shop","unknown"];
+ R.actMap=[];
+
+ for(let i=0;i<6;i++){
+  R.actMap.push(["combat",...shuffle(pool).slice(0,2)]);
+ }
+
+ R.mapAct=Math.floor(R.depth/7);
+}
+
+function pathPreview(){
+ const idx=R.depth%7;
+ if(idx+1>=6)return " · NEXT: GUARDIAN";
+
+ const next=R.actMap[idx+1].map(id=>NODE_INFO[id].title).join(" / ");
+ return ` · NEXT: ${next}`;
+}
+
 function route(){
  room=null;P=null;enemies=[];bullets=[];orbs=[];hazards=[];
  shopStock=null;
@@ -612,30 +639,87 @@ function route(){
  const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
  const boss=bossDepthAhead()?BOSSES[Math.floor(R.depth/7)]:null;
 
- const cards=boss?[
-  {title:"BOSS",tag:"GUARDIAN",desc:`${boss.name} blocks the way into the next biome.`,fn:()=>enter("boss")},
-  {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
- ]:[
-  {title:"COMBAT",tag:"FIVE WAVES",desc:"Escalating enemy waves.",fn:()=>enter("combat")},
-  {title:"ELITE",tag:"SIX WAVES",desc:"Stronger enemies, faster projectiles, better rewards.",fn:()=>enter("elite")},
-  {title:"REST",tag:"RECOVERY",desc:"Repair 35% HP and choose a mutation. The depth still advances.",fn:rest},
-  {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
- ];
+ let cards,preview;
+
+ if(boss){
+  cards=[
+   {title:"BOSS",tag:"GUARDIAN",desc:`${boss.name} blocks the way into the next biome.`,fn:()=>enter("boss")},
+   {title:"SHOP",tag:`${R.scrap} SCRAP`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",fn:shop}
+  ];
+  preview="";
+ }else{
+  if(R.mapAct!==Math.floor(R.depth/7))generateActMap();
+
+  cards=R.actMap[R.depth%7].map(id=>{
+   const info=NODE_INFO[id];
+   return {title:info.title,tag:typeof info.tag==="function"?info.tag():info.tag,desc:info.desc,fn:info.fn};
+  });
+  preview=pathPreview();
+ }
 
  show(`${biome.name.split(" ")[0]} <span>${biome.name.split(" ").slice(1).join(" ")}</span>`,
-  boss?"A guardian stands between you and the next biome. There is no way around it.":"Choose the next pressure test. Standard rooms contain five waves. Elite rooms contain six.",
+  boss?"A guardian stands between you and the next biome. There is no way around it.":"Choose the next pressure test. Not every path offers the same options.",
   cards,
   [
    {title:"BUILD",secondary:true,fn:build},
    {title:"TITLE",secondary:true,fn:title}
   ],
-  `<div class="small">ROOM ${R.depth+1} · LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · SCORE ${R.score}</div>`);
+  `<div class="small">ROOM ${R.depth+1} · LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · SCORE ${R.score}${preview}</div>`);
 }
 
 function rest(){
  R.depth++;
  heal(Math.ceil(S.maxHp*.35));
  mutationChoice(route,"REST — CHOOSE A <span>MUTATION</span>");
+}
+
+function unknownEvent(){
+ R.depth++;
+
+ const roll=Math.random();
+
+ if(roll<.35){
+  const amount=40+Math.floor(R.depth*3);
+  R.scrap+=amount;
+  show("A SEED <span>CRACKS OPEN</span>",
+   `Something valuable was buried here. +${amount} scrap.`,
+   [],
+   [{title:"CONTINUE",fn:route}]);
+ }else if(roll<.6){
+  heal(Math.ceil(S.maxHp*.5));
+  show("THE GARDEN <span>REMEMBERS</span>",
+   "Integrity restored, but nothing more.",
+   [],
+   [{title:"CONTINUE",fn:route}]);
+ }else if(roll<.85){
+  const dmg=Math.random()<.5?1:2;
+  R.hp-=dmg;
+  sfx.hit();
+
+  if(R.hp<=0){
+   finish(false);
+   return;
+  }
+
+  R.scrap+=60;
+  show("SOMETHING <span>STIRS</span>",
+   `An ambush costs ${dmg} integrity — but you salvage 60 scrap from the wreckage.`,
+   [],
+   [{title:"CONTINUE",fn:route}]);
+ }else{
+  R.hp-=1;
+  sfx.hit();
+
+  if(R.hp<=0){
+   finish(false);
+   return;
+  }
+
+  show("A CACHE <span>OVERGROWN</span>",
+   "Thorns guard something useful. It costs 1 integrity to reach.",
+   [],
+   [{title:"CONTINUE",fn:()=>mutationChoice(route,"CHOOSE A <span>MUTATION</span>")}]);
+ }
 }
 
 function enter(type){
