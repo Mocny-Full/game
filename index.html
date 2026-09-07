@@ -1280,7 +1280,11 @@ function damageEnemy(e,damage){
  R.kills++;
  room.kills++;
  R.score+=e.elite?160:85;
- R.scrap+=e.elite?6:2;
+
+ // Wave sizes run into the hundreds per room, so kill-scrap must stay
+ // small and mostly-elite or it dwarfs the room-clear/event rewards.
+ if(e.elite)R.scrap+=3;
+ else if(Math.random()<.25)R.scrap+=1;
 
  // Pulse does not recharge from ordinary kills anymore.
  orbs.push({x:e.x,y:e.y,value:e.xp});
