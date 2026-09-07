@@ -269,6 +269,8 @@ const sfx={
  dash(){noiseBurst(.15,.18,2200,"highpass")},
  pulse(){tone(90,.4,"sine",.28,280);noiseBurst(.3,.18,1500)},
  blast(){noiseBurst(.4,.32,300);tone(60,.4,"sine",.28,28)},
+ lance(){tone(500,.14,"sawtooth",.12,900)},
+ chain(){tone(700,.05,"square",.08,1400)},
  wave(){tone(220,.1,"sawtooth",.1,140)},
  levelUp(){tone(523,.12,"sine",.16);tone(659,.12,"sine",.16,null,.09);tone(784,.22,"sine",.2,null,.18)},
  roomClear(){tone(392,.15,"triangle",.18);tone(523,.15,"triangle",.18,null,.12);tone(659,.25,"triangle",.22,null,.24)},
@@ -337,7 +339,7 @@ let last=performance.now(),accumulator=0,visual=0,shake=0;
 let shopStock=null;
 
 let R=null,S=null,P=null,room=null;
-let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[];
+let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[],beams=[];
 
 function resize(){
  const r=canvas.getBoundingClientRect();
@@ -384,8 +386,13 @@ const MUTATIONS=[
  ["pulse","Event Horizon",4,"Pulse damage increases and costs less.","PULSE"],
  ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE"],
  ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL"],
- ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL"],
- ["drone","Orbiting Thorn",3,"Gain orbiting damage.","ORBITAL"]
+ ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL"]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4]}));
+
+const WEAPONS=[
+ ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL"],
+ ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM"],
+ ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC"]
 ].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4]}));
 
 const META_UPGRADES=[
@@ -413,6 +420,7 @@ const BIOMES=[
 ];
 
 function rank(id){return R?.mods?.[id]||0}
+function weaponRank(id){return R?.weapons?.[id]||0}
 function metaRank(id){return meta.upgrades[id]||0}
 function xpNeeded(){return Math.floor(48+R.level*30+Math.pow(R.level,1.35)*5)}
 function heal(n){R.hp=Math.min(S.maxHp,R.hp+n)}
@@ -570,7 +578,7 @@ function begin(frame){
  R={
   frame,depth:0,level:1,xp:0,
   hp:0,
-  mods:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
+  mods:{},weapons:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
   rerolls:2+metaRank("memory")
  };
  calculate();
@@ -639,7 +647,8 @@ function startCombat(){
   energy:22,
 
   fire:0,inv:1,
-  hits:new Set(),orbit:0,wake:0
+  hits:new Set(),orbit:0,wake:0,
+  lanceFire:0,chainFire:0
  };
  startAmbient();
  hide();
@@ -647,12 +656,13 @@ function startCombat(){
 
 function build(){
  const mods=MUTATIONS.filter(x=>rank(x.id));
+ const owned=WEAPONS.filter(x=>weaponRank(x.id));
 
  show("YOUR <span>BUILD</span>",
   `LEVEL ${R.level} · HP ${R.hp}/${S.maxHp} · DAMAGE ${S.damage.toFixed(1)} · DASH ${S.dashCD.toFixed(2)}s · PULSE ${S.pulseCost.toFixed(0)} ENERGY`,
   [],
   [{title:"BACK",fn:route}],
-  `<div>${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||"No mutations yet."}</div>`);
+  `<div>${owned.map(x=>`<span class="badge">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":"No mutations yet.")}</div>`);
 }
 
 function shop(){
@@ -723,13 +733,15 @@ function shop(){
 }
 
 function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"){
- const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3);
+ const mutationPool=MUTATIONS.filter(x=>rank(x.id)<x.max).map(x=>({...x,kind:"mutation"}));
+ const weaponPool=WEAPONS.filter(x=>weaponRank(x.id)<x.max).map(x=>({...x,kind:"weapon"}));
+ const pool=shuffle([...mutationPool,...weaponPool]).slice(0,3);
 
  if(!pool.length){
   heal(2);
   sfx.levelUp();
   show("FULLY <span>BLOOMED</span>",
-   "Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+   "Every mutation and weapon has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
    [],
    [{title:"CONTINUE",fn:done}]);
   return;
@@ -738,18 +750,26 @@ function mutationChoice(done,title="LEVEL UP — CHOOSE A <span>MUTATION</span>"
  sfx.levelUp();
  show(title,
   "Read the cards. Your build is the main source of power.",
-  pool.map(m=>({
-   title:m.name,
-   tag:m.tag,
-   desc:m.desc,
-   foot:`RANK ${rank(m.id)+1}/${m.max}`,
-   fn:()=>{
-    R.mods[m.id]=rank(m.id)+1;
-    calculate();
-    if(m.id==="armor")heal(2);
-    done();
-   }
-  })),
+  pool.map(m=>{
+   const current=m.kind==="weapon"?weaponRank(m.id):rank(m.id);
+
+   return {
+    title:m.name,
+    tag:m.kind==="weapon"&&current===0?"NEW WEAPON":m.tag,
+    desc:m.desc,
+    foot:`RANK ${current+1}/${m.max}`,
+    fn:()=>{
+     if(m.kind==="weapon"){
+      R.weapons[m.id]=current+1;
+     }else{
+      R.mods[m.id]=current+1;
+      if(m.id==="armor")heal(2);
+     }
+     calculate();
+     done();
+    }
+   };
+  }),
   [{
    title:`REROLL (${R.rerolls})`,
    secondary:true,
@@ -948,17 +968,92 @@ function updatePlayer(dt){
   }
  }
 
- for(let i=0;i<rank("drone");i++){
-  const a=P.orbit+i*TAU/rank("drone");
-  const point={
-   x:P.x+Math.cos(a)*68,
-   y:P.y+Math.sin(a)*68
-  };
+ updateWeapons(dt);
+}
 
-  for(const e of enemies){
-   if(!e.dead&&!e.orbitHit&&distance(point,e)<e.r+10){
-    e.orbitHit=.25;
-    damageEnemy(e,22+rank("drone")*8);
+function updateWeapons(dt){
+ const haloCount=weaponRank("halo");
+
+ if(haloCount>0){
+  const haloDamage=18+weaponRank("halo")*10;
+
+  for(let i=0;i<haloCount;i++){
+   const a=P.orbit+i*TAU/haloCount;
+   const point={
+    x:P.x+Math.cos(a)*68,
+    y:P.y+Math.sin(a)*68
+   };
+
+   for(const e of enemies){
+    if(!e.dead&&!e.orbitHit&&distance(point,e)<e.r+10){
+     e.orbitHit=.25;
+     damageEnemy(e,haloDamage);
+    }
+   }
+  }
+ }
+
+ if(weaponRank("lance")>0){
+  P.lanceFire-=dt;
+
+  if(P.lanceFire<=0){
+   const target=nearest(P.x,P.y);
+
+   if(target){
+    const a=angle(P,target);
+    const range=420;
+    const ex=P.x+Math.cos(a)*range;
+    const ey=P.y+Math.sin(a)*range;
+    const damage=26+weaponRank("lance")*14;
+
+    for(const e of enemies){
+     if(!e.dead&&pointSegment(e.x,e.y,P.x,P.y,ex,ey)<e.r+6){
+      damageEnemy(e,damage);
+     }
+    }
+
+    beams.push({x1:P.x,y1:P.y,x2:ex,y2:ey,life:.15,max:.15,color:C.violet});
+    sfx.lance();
+    P.lanceFire=1.7-weaponRank("lance")*.15;
+   }
+  }
+ }
+
+ if(weaponRank("chain")>0){
+  P.chainFire-=dt;
+
+  if(P.chainFire<=0){
+   let source={x:P.x,y:P.y};
+   const hitIds=new Set();
+   const jumps=weaponRank("chain")+1;
+   const damage=20+weaponRank("chain")*10;
+   let any=false;
+
+   for(let i=0;i<jumps;i++){
+    let best=null,bestDist=270;
+
+    for(const e of enemies){
+     if(e.dead||e.born>0||hitIds.has(e.id))continue;
+
+     const d=Math.hypot(e.x-source.x,e.y-source.y);
+     if(d<bestDist){
+      bestDist=d;
+      best=e;
+     }
+    }
+
+    if(!best)break;
+
+    damageEnemy(best,damage);
+    hitIds.add(best.id);
+    beams.push({x1:source.x,y1:source.y,x2:best.x,y2:best.y,life:.2,max:.2,color:C.gold});
+    source={x:best.x,y:best.y};
+    any=true;
+   }
+
+   if(any){
+    sfx.chain();
+    P.chainFire=2.1-weaponRank("chain")*.15;
    }
   }
  }
@@ -1842,8 +1937,27 @@ function draw(){
  }
  ctx.globalAlpha=1;
 
+ for(const b of beams){
+  ctx.globalAlpha=b.life/b.max;
+  line(b.x1,b.y1,b.x2,b.y2,b.color,3);
+ }
+ ctx.globalAlpha=1;
+
+ drawWeapons();
+
  ctx.restore();
  drawHUD();
+}
+
+function drawWeapons(){
+ if(!P)return;
+
+ const haloCount=weaponRank("halo");
+
+ for(let i=0;i<haloCount;i++){
+  const a=P.orbit+i*TAU/haloCount;
+  circle(P.x+Math.cos(a)*68,P.y+Math.sin(a)*68,9,C.violet,2);
+ }
 }
 
 function effects(dt){
@@ -1866,6 +1980,9 @@ function effects(dt){
   l.y-=dt*18;
  });
  labels=labels.filter(l=>l.life>0);
+
+ beams.forEach(b=>b.life-=dt);
+ beams=beams.filter(b=>b.life>0);
 }
 
 function dash(){
