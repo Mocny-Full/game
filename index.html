@@ -2054,11 +2054,10 @@ function spawnBoss(){
  const idx=Math.min(3,Math.floor(R.depth/7));
  const def=BOSSES[idx];
  const hpScale=1+R.depth*.1;
- // 4x the previous base (which was itself already doubled once) — even
- // that pass was still dying to a built player's DPS in well under the
- // time it takes standard combat waves to clear, per direct feedback
- // that every guardian was easier than an ordinary room.
- const hp=6800*hpScale;
+ // Doubled again on top of the previous 4x pass — still dying too fast
+ // per direct feedback that the first guardian (and by extension the
+ // rest) was still easier than an ordinary combat room.
+ const hp=13600*hpScale;
 
  const boss={
   type:"boss",shape:"boss",
@@ -2092,8 +2091,8 @@ function spawnBoss(){
 function spawnReflectionFinal(){
  const hpScale=1+R.depth*.1;
 
- // Scaled up in the same proportion as the four named guardians below.
- const hp=9200*hpScale;
+ // Scaled up in the same proportion as the four named guardians above.
+ const hp=18400*hpScale;
 
  const boss={
   type:"boss",shape:"boss",isReflection:true,
@@ -2119,9 +2118,9 @@ function spawnReflectionFinal(){
 // their build (weapon ranks + spread mutation). In chaotic mode, half the
 // shots pick a random living enemy instead of the player — used by the
 // roaming encounter; the final boss always fires it player-only.
-function reflectionMirrorVolley(e,chaotic){
+function reflectionMirrorVolley(e,chaotic,dmgMult=1){
  const shots=3+weaponRank("halo")+weaponRank("lance")+weaponRank("chain")+rank("spread");
- const dmg=14+R.depth*.6;
+ const dmg=(14+R.depth*.6)*dmgMult;
  const baseAngle=angle(e,P);
 
  for(let i=0;i<shots;i++){
@@ -2149,10 +2148,11 @@ function reflectionMirrorVolley(e,chaotic){
 // carries its own extra attack (reflectionMirrorVolley above).
 function bossSpecialAttack(e){
  if(e.kind===0){
-  // BLOOMSHEAR - Root Snare: three delayed blast zones erupt scattered
-  // around wherever the player is standing right now, so surviving means
-  // actually moving off the spot, not just micrododging bullets in place.
-  for(let i=0;i<3;i++){
+  // BLOOMSHEAR - Root Snare: six delayed blast zones (doubled from three)
+  // erupt scattered around wherever the player is standing right now, so
+  // surviving means actually moving off the spot, not just micrododging
+  // bullets in place.
+  for(let i=0;i<6;i++){
    const a=random(0,TAU);
    const r=random(0,90);
 
@@ -2167,19 +2167,19 @@ function bossSpecialAttack(e){
   sfx.bossRadial();
  }else if(e.kind===1){
   // THE CATALOGUER - Mirrored Volley: the same build-scaling spread the
-  // Reflection encounters use. The stronger the player's own loadout,
-  // the wider and nastier this gets — fitting for a boss themed around
-  // cataloguing exactly what you brought in with you.
-  reflectionMirrorVolley(e,false);
+  // Reflection encounters use, at double damage here — the stronger the
+  // player's own loadout, the wider and nastier this gets, fitting for a
+  // boss themed around cataloguing exactly what you brought in with you.
+  reflectionMirrorVolley(e,false,2);
  }else if(e.kind===2){
-  // FURNACE CORE - Cinder Line: a fast, narrow line of heavy shots fired
-  // straight down the player's position at cast time, instead of a wide
-  // spread — punishes staying on the sightline instead of just being
-  // somewhere in the open.
+  // FURNACE CORE - Cinder Line: a fast, narrow line of heavy (doubled)
+  // shots fired straight down the player's position at cast time,
+  // instead of a wide spread — punishes staying on the sightline instead
+  // of just being somewhere in the open.
   const a=angle(e,P);
 
   for(let i=0;i<6;i++){
-   bullet(e.x+Math.cos(a)*i*22,e.y+Math.sin(a)*i*22,a,900,false,7);
+   bullet(e.x+Math.cos(a)*i*22,e.y+Math.sin(a)*i*22,a,900,false,14);
   }
 
   sfx.bossCharge();
@@ -2187,7 +2187,8 @@ function bossSpecialAttack(e){
   // THE OCCULTATION - Singularity Pull: drags the player toward the
   // boss for a short window instead of the boss lunging at the player —
   // fights the player's own movement input rather than being sidestepped
-  // by it, so this is now handled continuously in updateBoss below.
+  // by it, so this is now handled continuously in updateBoss below. Pull
+  // strength is doubled there too.
   e.pullTimer=.6;
   sfx.bossCharge();
  }else{
@@ -2214,7 +2215,9 @@ function runBossAttack(e){
   const count=14+Math.floor((1-hpFrac)*8);
 
   for(let i=0;i<count;i++){
-   bullet(e.x,e.y,i*TAU/count,240,false,1);
+   // Doubled from 1 to 2 per bullet — with 14+ bullets per cast, the old
+   // value meant standing in the open during this attack barely mattered.
+   bullet(e.x,e.y,i*TAU/count,240,false,2);
   }
 
   sfx.bossRadial();
@@ -2256,12 +2259,14 @@ function updateBoss(e,dt){
  // of the charge/tell/idle state machine below, so it can keep dragging
  // the player in even while the boss itself is mid-telegraph for its
  // next attack. Clamped to the same bounds updatePlayer uses, since this
- // runs after updatePlayer already clamped this frame.
+ // runs after updatePlayer already clamped this frame. Pull strength
+ // doubled from 220 to 440 — the original was too gentle to meaningfully
+ // fight the player's own movement input.
  if(e.pullTimer>0){
   e.pullTimer-=dt;
   const pa=angle(P,e);
-  P.x+=Math.cos(pa)*220*dt;
-  P.y+=Math.sin(pa)*220*dt;
+  P.x+=Math.cos(pa)*440*dt;
+  P.y+=Math.sin(pa)*440*dt;
   P.x=clamp(P.x,25,W-25);
   P.y=clamp(P.y,TOP+25,BOTTOM-25);
  }
