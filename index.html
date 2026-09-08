@@ -984,8 +984,12 @@ const BIOMES=[
 // depth 7 the player has only had six rooms to build up, so the shared
 // formula alone left it feeling like a non-event compared to the later
 // three guardians (whose depth scaling had already caught up by then).
+// There isn't much headroom left to push this further: at 1.4 it already
+// sits right at THE CATALOGUER's own HP total, so from here the fight
+// needs to get more dangerous, not just longer — see the firstBoss
+// branches in runBossAttack/updateBoss below.
 const BOSSES=[
- {name:"BLOOMSHEAR",color:C.mint,hpMult:1.4},
+ {name:"BLOOMSHEAR",color:C.mint,hpMult:1.45},
  {name:"THE CATALOGUER",color:C.violet},
  {name:"FURNACE CORE",color:C.gold},
  {name:"THE OCCULTATION",color:C.blue}
@@ -2121,7 +2125,9 @@ function runBossAttack(e){
 
  if(e.attackIndex===0){
   const hpFrac=e.hp/e.maxHp;
-  const count=10+Math.floor((1-hpFrac)*8);
+  // BLOOMSHEAR's radial burst is noticeably denser from the very first
+  // cast — the other guardians only reach this density near death.
+  const count=(e.firstBoss?14:10)+Math.floor((1-hpFrac)*8);
 
   for(let i=0;i<count;i++){
    bullet(e.x,e.y,i*TAU/count,240,false,1);
@@ -2131,10 +2137,12 @@ function runBossAttack(e){
  }else if(e.attackIndex===1){
   e.chargeAim=angle(e,P);
   e.chargeState=1;
-  e.chargeTimer=.5;
+  // A longer, faster charge covers noticeably more ground, so kiting in
+  // a straight line away from it is no longer automatically safe.
+  e.chargeTimer=e.firstBoss?.65:.5;
   sfx.bossCharge();
  }else{
-  for(let i=0;i<3;i++){
+  for(let i=0;i<(e.firstBoss?4:3);i++){
    spawn(choose(["seeker","gunner"]));
   }
 
@@ -2167,8 +2175,8 @@ function updateBoss(e,dt){
  }
 
  if(e.chargeState===1){
-  e.x+=Math.cos(e.chargeAim)*680*dt;
-  e.y+=Math.sin(e.chargeAim)*680*dt;
+  e.x+=Math.cos(e.chargeAim)*(e.firstBoss?760:680)*dt;
+  e.y+=Math.sin(e.chargeAim)*(e.firstBoss?760:680)*dt;
   e.chargeTimer-=dt;
   if(e.chargeTimer<=0)e.chargeState=0;
  }else if(e.tell>0){
@@ -2177,7 +2185,12 @@ function updateBoss(e,dt){
  }else{
   const a=angle(e,P);
   const n=distance(e,P);
-  const speed=n>300?60:0;
+  // The other guardians go fully passive at close range, which is exactly
+  // what let a player camp just outside their radial burst and never get
+  // touched between telegraphed attacks. BLOOMSHEAR always keeps closing
+  // in (just slower once it's already close), so standing still is never
+  // free.
+  const speed=e.firstBoss?(n>150?95:45):(n>300?60:0);
   e.x+=Math.cos(a)*speed*dt;
   e.y+=Math.sin(a)*speed*dt;
 
