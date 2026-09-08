@@ -2030,16 +2030,18 @@ function spawnBoss(){
  const idx=Math.min(3,Math.floor(R.depth/7));
  const def=BOSSES[idx];
  const hpScale=1+R.depth*.1;
- // Base HP roughly doubled across every guardian — the old 850 base put
- // even the final boss well within one-shot-kill-speed of a moderately
- // built player's DPS (mutations compound multiplicatively: power and
- // rate alone can put a fully-invested build well over 2-3x its frame's
- // base damage output), so every boss died in single-digit seconds
- // regardless of how aggressive its attacks were.
- const hp=1700*hpScale;
+ // 4x the previous base (which was itself already doubled once) — even
+ // that pass was still dying to a built player's DPS in well under the
+ // time it takes standard combat waves to clear, per direct feedback
+ // that every guardian was easier than an ordinary room.
+ const hp=6800*hpScale;
 
  const boss={
   type:"boss",shape:"boss",
+  // kind is the guardian's index into BOSSES — drives which signature
+  // move bossSpecialAttack below gives this fight, so no two guardians
+  // play the same beyond the shared radial/summon moves.
+  kind:idx,
   name:def.name,color:def.color,
   x:600,y:230,r:46,
   hp,maxHp:hp,
@@ -2049,7 +2051,7 @@ function spawnBoss(){
   // Every guardian opens its first attack quickly now, instead of giving
   // the player a long free window right at the start of the fight.
   attackIndex:0,attackTimer:1.6,
-  chargeState:0,chargeAim:0,chargeTimer:0,
+  chargeState:0,chargeAim:0,chargeTimer:0,pullTimer:0,
   enrageStage:0
  };
 
@@ -2067,7 +2069,7 @@ function spawnReflectionFinal(){
  const hpScale=1+R.depth*.1;
 
  // Scaled up in the same proportion as the four named guardians below.
- const hp=2300*hpScale;
+ const hp=9200*hpScale;
 
  const boss={
   type:"boss",shape:"boss",isReflection:true,
@@ -2078,7 +2080,7 @@ function spawnReflectionFinal(){
   age:0,slow:0,burn:0,hit:0,orbitHit:0,
   tell:0,aim:0,
   attackIndex:0,attackTimer:1.6,
-  chargeState:0,chargeAim:0,chargeTimer:0,
+  chargeState:0,chargeAim:0,chargeTimer:0,pullTimer:0,
   enrageStage:0
  };
 
@@ -2114,6 +2116,64 @@ function reflectionMirrorVolley(e,chaotic){
  sfx.reflectionVolley();
 }
 
+// Each named guardian's signature move, replacing the generic charge that
+// used to fill every boss's attackIndex===1 slot — a straight-line dash
+// reads identically on all four fights, which was itself part of why they
+// felt interchangeable and easy. e.kind is the guardian's index into
+// BOSSES (set in spawnBoss); the secret REFLECTION phase has no kind and
+// falls through to the plain charge at the bottom, since it already
+// carries its own extra attack (reflectionMirrorVolley above).
+function bossSpecialAttack(e){
+ if(e.kind===0){
+  // BLOOMSHEAR - Root Snare: three delayed blast zones erupt scattered
+  // around wherever the player is standing right now, so surviving means
+  // actually moving off the spot, not just micrododging bullets in place.
+  for(let i=0;i<3;i++){
+   const a=random(0,TAU);
+   const r=random(0,90);
+
+   hazards.push({
+    type:"blast",
+    x:clamp(P.x+Math.cos(a)*r,140,W-140),
+    y:clamp(P.y+Math.sin(a)*r,TOP+110,BOTTOM-110),
+    r:70,delay:.85,age:0,duration:.4,dead:false,hit:false
+   });
+  }
+
+  sfx.bossRadial();
+ }else if(e.kind===1){
+  // THE CATALOGUER - Mirrored Volley: the same build-scaling spread the
+  // Reflection encounters use. The stronger the player's own loadout,
+  // the wider and nastier this gets — fitting for a boss themed around
+  // cataloguing exactly what you brought in with you.
+  reflectionMirrorVolley(e,false);
+ }else if(e.kind===2){
+  // FURNACE CORE - Cinder Line: a fast, narrow line of heavy shots fired
+  // straight down the player's position at cast time, instead of a wide
+  // spread — punishes staying on the sightline instead of just being
+  // somewhere in the open.
+  const a=angle(e,P);
+
+  for(let i=0;i<6;i++){
+   bullet(e.x+Math.cos(a)*i*22,e.y+Math.sin(a)*i*22,a,900,false,7);
+  }
+
+  sfx.bossCharge();
+ }else if(e.kind===3){
+  // THE OCCULTATION - Singularity Pull: drags the player toward the
+  // boss for a short window instead of the boss lunging at the player —
+  // fights the player's own movement input rather than being sidestepped
+  // by it, so this is now handled continuously in updateBoss below.
+  e.pullTimer=.6;
+  sfx.bossCharge();
+ }else{
+  e.chargeAim=angle(e,P);
+  e.chargeState=1;
+  e.chargeTimer=.65;
+  sfx.bossCharge();
+ }
+}
+
 function runBossAttack(e){
  const cycleLen=e.isReflection?4:3;
  e.attackIndex=(e.attackIndex+1)%cycleLen;
@@ -2135,12 +2195,7 @@ function runBossAttack(e){
 
   sfx.bossRadial();
  }else if(e.attackIndex===1){
-  e.chargeAim=angle(e,P);
-  e.chargeState=1;
-  // A longer, faster charge covers noticeably more ground, so kiting in
-  // a straight line away from it is no longer automatically safe.
-  e.chargeTimer=.65;
-  sfx.bossCharge();
+  bossSpecialAttack(e);
  }else{
   for(let i=0;i<4;i++){
    spawn(choose(["seeker","gunner"]));
@@ -2173,6 +2228,20 @@ function updateBoss(e,dt){
   label(e.x,e.y-70,t("enraged_label"),e.color,1.2);
  }
 
+ // THE OCCULTATION's Singularity Pull runs on its own clock, independent
+ // of the charge/tell/idle state machine below, so it can keep dragging
+ // the player in even while the boss itself is mid-telegraph for its
+ // next attack. Clamped to the same bounds updatePlayer uses, since this
+ // runs after updatePlayer already clamped this frame.
+ if(e.pullTimer>0){
+  e.pullTimer-=dt;
+  const pa=angle(P,e);
+  P.x+=Math.cos(pa)*220*dt;
+  P.y+=Math.sin(pa)*220*dt;
+  P.x=clamp(P.x,25,W-25);
+  P.y=clamp(P.y,TOP+25,BOTTOM-25);
+ }
+
  if(e.chargeState===1){
   e.x+=Math.cos(e.chargeAim)*760*dt;
   e.y+=Math.sin(e.chargeAim)*760*dt;
@@ -2187,8 +2256,9 @@ function updateBoss(e,dt){
   // Guardians used to go fully passive at close range, which is exactly
   // what let a player camp just outside the radial burst and never get
   // touched between telegraphed attacks. They now always keep closing in
-  // (just slower once already close), so standing still is never free.
-  const speed=n>150?95:45;
+  // (just slower once already close, and 3x faster than before at both
+  // ranges), so standing still is never free.
+  const speed=n>150?285:135;
   e.x+=Math.cos(a)*speed*dt;
   e.y+=Math.sin(a)*speed*dt;
 
