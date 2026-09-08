@@ -980,16 +980,8 @@ const BIOMES=[
  {name:"EVENT HORIZON",name_pl:"HORYZONT ZDARZEŃ",color:C.blue,bg:"#102334"}
 ];
 
-// BLOOMSHEAR gets its own hpMult on top of the shared depth scaling — at
-// depth 7 the player has only had six rooms to build up, so the shared
-// formula alone left it feeling like a non-event compared to the later
-// three guardians (whose depth scaling had already caught up by then).
-// There isn't much headroom left to push this further: at 1.4 it already
-// sits right at THE CATALOGUER's own HP total, so from here the fight
-// needs to get more dangerous, not just longer — see the firstBoss
-// branches in runBossAttack/updateBoss below.
 const BOSSES=[
- {name:"BLOOMSHEAR",color:C.mint,hpMult:1.45},
+ {name:"BLOOMSHEAR",color:C.mint},
  {name:"THE CATALOGUER",color:C.violet},
  {name:"FURNACE CORE",color:C.gold},
  {name:"THE OCCULTATION",color:C.blue}
@@ -2038,8 +2030,13 @@ function spawnBoss(){
  const idx=Math.min(3,Math.floor(R.depth/7));
  const def=BOSSES[idx];
  const hpScale=1+R.depth*.1;
- const hp=850*hpScale*(def.hpMult||1);
- const firstBoss=idx===0;
+ // Base HP roughly doubled across every guardian — the old 850 base put
+ // even the final boss well within one-shot-kill-speed of a moderately
+ // built player's DPS (mutations compound multiplicatively: power and
+ // rate alone can put a fully-invested build well over 2-3x its frame's
+ // base damage output), so every boss died in single-digit seconds
+ // regardless of how aggressive its attacks were.
+ const hp=1700*hpScale;
 
  const boss={
   type:"boss",shape:"boss",
@@ -2049,11 +2046,11 @@ function spawnBoss(){
   elite:true,born:1.2,dead:false,id:Math.random(),
   age:0,slow:0,burn:0,hit:0,orbitHit:0,
   tell:0,aim:0,
-  // BLOOMSHEAR opens its first attack sooner than the later guardians,
-  // instead of giving the player a long free window right at the start.
-  attackIndex:0,attackTimer:firstBoss?1.6:2.5,
+  // Every guardian opens its first attack quickly now, instead of giving
+  // the player a long free window right at the start of the fight.
+  attackIndex:0,attackTimer:1.6,
   chargeState:0,chargeAim:0,chargeTimer:0,
-  enrageStage:0,firstBoss
+  enrageStage:0
  };
 
  enemies.push(boss);
@@ -2069,15 +2066,18 @@ function spawnBoss(){
 function spawnReflectionFinal(){
  const hpScale=1+R.depth*.1;
 
+ // Scaled up in the same proportion as the four named guardians below.
+ const hp=2300*hpScale;
+
  const boss={
   type:"boss",shape:"boss",isReflection:true,
   name:"THE REFLECTION",color:C.spectral,
   x:600,y:230,r:44,
-  hp:1150*hpScale,maxHp:1150*hpScale,
+  hp,maxHp:hp,
   elite:true,born:1.4,dead:false,id:Math.random(),
   age:0,slow:0,burn:0,hit:0,orbitHit:0,
   tell:0,aim:0,
-  attackIndex:0,attackTimer:2.2,
+  attackIndex:0,attackTimer:1.6,
   chargeState:0,chargeAim:0,chargeTimer:0,
   enrageStage:0
  };
@@ -2125,9 +2125,9 @@ function runBossAttack(e){
 
  if(e.attackIndex===0){
   const hpFrac=e.hp/e.maxHp;
-  // BLOOMSHEAR's radial burst is noticeably denser from the very first
-  // cast — the other guardians only reach this density near death.
-  const count=(e.firstBoss?14:10)+Math.floor((1-hpFrac)*8);
+  // Every guardian's radial burst is noticeably denser from the very
+  // first cast now, rather than only reaching this density near death.
+  const count=14+Math.floor((1-hpFrac)*8);
 
   for(let i=0;i<count;i++){
    bullet(e.x,e.y,i*TAU/count,240,false,1);
@@ -2139,10 +2139,10 @@ function runBossAttack(e){
   e.chargeState=1;
   // A longer, faster charge covers noticeably more ground, so kiting in
   // a straight line away from it is no longer automatically safe.
-  e.chargeTimer=e.firstBoss?.65:.5;
+  e.chargeTimer=.65;
   sfx.bossCharge();
  }else{
-  for(let i=0;i<(e.firstBoss?4:3);i++){
+  for(let i=0;i<4;i++){
    spawn(choose(["seeker","gunner"]));
   }
 
@@ -2161,12 +2161,11 @@ function updateBoss(e,dt){
 
  const hpFrac=e.hp/e.maxHp;
  const stage=hpFrac<.33?2:hpFrac<.66?1:0;
- // BLOOMSHEAR attacks noticeably more often at every stage than the
- // later guardians, so it doesn't read as a pushover next to them —
- // clamped so its enraged stage doesn't get uncomfortably close to the
+ // Every guardian attacks meaningfully more often at every stage now —
+ // clamped so the enraged stage doesn't get uncomfortably close to the
  // .9s attack tell itself.
  const baseCycle=stage===2?1.6:stage===1?2.1:2.6;
- const cycle=e.firstBoss?Math.max(1.3,baseCycle-.5):baseCycle;
+ const cycle=Math.max(1.3,baseCycle-.5);
 
  if(stage>e.enrageStage){
   e.enrageStage=stage;
@@ -2175,8 +2174,8 @@ function updateBoss(e,dt){
  }
 
  if(e.chargeState===1){
-  e.x+=Math.cos(e.chargeAim)*(e.firstBoss?760:680)*dt;
-  e.y+=Math.sin(e.chargeAim)*(e.firstBoss?760:680)*dt;
+  e.x+=Math.cos(e.chargeAim)*760*dt;
+  e.y+=Math.sin(e.chargeAim)*760*dt;
   e.chargeTimer-=dt;
   if(e.chargeTimer<=0)e.chargeState=0;
  }else if(e.tell>0){
@@ -2185,12 +2184,11 @@ function updateBoss(e,dt){
  }else{
   const a=angle(e,P);
   const n=distance(e,P);
-  // The other guardians go fully passive at close range, which is exactly
-  // what let a player camp just outside their radial burst and never get
-  // touched between telegraphed attacks. BLOOMSHEAR always keeps closing
-  // in (just slower once it's already close), so standing still is never
-  // free.
-  const speed=e.firstBoss?(n>150?95:45):(n>300?60:0);
+  // Guardians used to go fully passive at close range, which is exactly
+  // what let a player camp just outside the radial burst and never get
+  // touched between telegraphed attacks. They now always keep closing in
+  // (just slower once already close), so standing still is never free.
+  const speed=n>150?95:45;
   e.x+=Math.cos(a)*speed*dt;
   e.y+=Math.sin(a)*speed*dt;
 
