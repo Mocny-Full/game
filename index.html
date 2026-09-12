@@ -2581,8 +2581,12 @@ function updateEnemy(e,dt){
  const a=angle(e,P);
  const n=distance(e,P);
  // Tanks are the slowest thing in the roster, so their overdrive form
- // triples speed instead of doubling — everyone else stays at 2x.
- const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:2):1);
+ // triples speed instead of the standard 1.5x. That standard multiplier
+ // used to be 2x, but combined with the depth scaling above that meant
+ // even a merged seeker (let alone a mite) outran Bastion — the game's
+ // slowest frame — from as early as depth 8, making overdrive enemies
+ // flatly unescapable rather than just more dangerous for most of a run.
+ const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:1.5):1);
 
  if(e.type==="charger"){
   if(e.charge>0){
