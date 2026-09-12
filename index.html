@@ -1,0 +1,4052 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#03060a">
+<title>VOID BLOOM: ECHOES</title>
+<style>
+:root{
+  color-scheme:dark;
+  --mint:#71ffd0;--gold:#ffcf78;--pink:#ff7197;
+  --blue:#79ceff;--violet:#bda2ff;--ink:#e8f4ff;--muted:#96aabd;
+  --barL:0px;--barR:0px;--stageTop:0px;--stageBottom:0px;--stageW:100vw;--stageH:100dvh
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#03060a;color:var(--ink);font-family:system-ui,sans-serif}
+body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow:hidden;touch-action:none;overscroll-behavior:none}
+#stage{position:relative;width:min(1200px,100vw,calc(100dvh * 3 / 2));aspect-ratio:3/2;background:#080e18;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:4%;overflow:auto;background:#040914e8;backdrop-filter:blur(8px);touch-action:auto;z-index:5}
+#overlay.hidden{display:none}
+/* Stacks as normal flow inside a single fixed column so #rotateHint and
+   #a2hsHint (below) never need to know about each other's height. The
+   safe-area inset lives on the shared container so whichever hint ends up
+   visually first still clears the notch/status bar. */
+#hintStack{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;flex-direction:column;
+ padding-top:env(safe-area-inset-top,0px)}
+#rotateHint{padding:6px 10px;background:#12242bcc;color:var(--gold);font:600 11px monospace;text-align:center;display:none}
+@media(orientation:portrait) and (pointer:coarse){
+ #rotateHint{display:block}
+}
+/* iPhone Safari has no Fullscreen API for regular page content (only
+   iPadOS and Android do), so requestFullscreen() silently no-ops there.
+   The only genuine fullscreen/no-chrome experience on iPhone is launching
+   from a Home Screen icon (already supported via the apple-mobile-web-app
+   meta tags above) — this banner is the fallback nudge toward that, shown
+   only when the real API is unavailable. */
+#a2hsHint{position:relative;display:none;padding:6px 34px 6px 10px;
+ background:#1a1428cc;color:var(--violet);font:600 11px monospace;text-align:center}
+#a2hsHint.show{display:block}
+#a2hsHint button{position:absolute;top:2px;right:6px;
+ width:22px;height:22px;border:1px solid var(--violet);background:transparent;color:var(--violet);
+ font:700 12px monospace;line-height:1;border-radius:50%;cursor:pointer;padding:0}
+/* #touch spans the full viewport (not just #stage) so controls can live in
+   the letterbox bars beside the stage instead of covering the play field. */
+#touch{position:fixed;inset:0;display:none;touch-action:none;z-index:4;pointer-events:none}
+#touch.active{display:block}
+/* The joystick can start from a touch anywhere on screen — it only ever
+   covers the play field's dead space anyway, and pinning it to the bar
+   turned out to be more of a hindrance than a help. Buttons sit later in
+   the DOM so they still intercept their own taps first. */
+#joyZone{position:fixed;inset:0;pointer-events:auto;touch-action:none}
+#joyBase{position:fixed;width:104px;height:104px;margin:-52px 0 0 -52px;border:2px solid var(--mint);border-radius:50%;background:#0c1422b3;opacity:0;transition:opacity .12s;pointer-events:none}
+#joyBase.show{opacity:.9}
+#joyKnob{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--mint);opacity:.9;pointer-events:none}
+.tbtn{position:fixed;pointer-events:auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 11px monospace;color:#08251e;background:var(--mint);opacity:.82;user-select:none;-webkit-user-select:none;touch-action:none;border:none;--ready:1}
+.tbtn:active{opacity:1;transform:scale(.94)}
+.tbtn.ready{box-shadow:0 0 14px 3px #ffffffb0}
+/* A conic-gradient "pie" overlay shows recharge progress directly on the
+   button instead of a separate HUD bar — the dark wedge shrinks to
+   nothing as --ready goes from 0 to 1. */
+.tbtn::before{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+ background:conic-gradient(transparent calc(var(--ready) * 360deg),#00000080 0)}
+#btnDash{width:76px;height:76px;right:calc(var(--barR) + 104px);bottom:calc(var(--stageBottom) + 26px)}
+#btnPulse{width:76px;height:76px;right:calc(var(--barR) + 20px);bottom:calc(var(--stageBottom) + 26px);background:var(--gold)}
+#btnPause{width:42px;height:42px;right:calc(var(--barR) + 16px);top:calc(var(--stageTop) + 16px + env(safe-area-inset-top,0px));background:#12242bcc;color:var(--mint);border:1px solid var(--mint);font-size:9px}
+#touch.bars #btnDash{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 116px)}
+#touch.bars #btnPulse{right:calc((var(--barR) - 76px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 26px)}
+#touch.bars #btnPause{right:calc((var(--barR) - 42px)/2 + env(safe-area-inset-right,0px))}
+@media(max-width:700px){
+ #btnDash{width:62px;height:62px;right:calc(var(--barR) + 82px);bottom:calc(var(--stageBottom) + 14px)}
+ #btnPulse{width:62px;height:62px;right:calc(var(--barR) + 14px);bottom:calc(var(--stageBottom) + 14px)}
+ #touch.bars #btnDash{right:calc((var(--barR) - 62px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 86px)}
+ #touch.bars #btnPulse{right:calc((var(--barR) - 62px)/2 + env(safe-area-inset-right,0px));bottom:calc(var(--stageBottom) + 14px)}
+}
+.panel{width:min(1000px,100%);text-align:center}
+.eyebrow{color:var(--mint);font:700 12px monospace;letter-spacing:.2em}
+h1{font-size:clamp(30px,6vw,72px);line-height:1;margin:14px 0;letter-spacing:-.06em}
+h1 span{color:var(--mint)}
+.sub{max-width:820px;margin:15px auto;color:#aec0d1;line-height:1.6;font-size:14px}
+.small{color:var(--muted);font:11px/1.8 monospace;margin:15px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin:22px 0}
+.card,.button{font-family:inherit;cursor:pointer}
+.card{min-height:155px;padding:20px;text-align:left;color:var(--ink);border:1px solid #304759;background:linear-gradient(145deg,#182a38,#0c1422);transition:.15s}
+.card:hover{border-color:var(--mint);transform:translateY(-3px)}
+.card:disabled{opacity:.35;cursor:not-allowed}
+.card em{color:var(--mint);font:700 11px monospace;font-style:normal}
+.card h3{margin:13px 0 8px;font-size:18px}
+.card p{margin:0;color:#acbdce;font-size:13px;line-height:1.5}
+.card p.lore{margin-top:9px;font-style:italic;opacity:.72}
+.card small{display:block;color:var(--gold);margin-top:13px;font-size:11px}
+/* Weapons are the player's own reclaimed gear, never a mutation the
+   garden hands over — a gold accent (matching the HUD's existing
+   mutation-vs-weapon color split) sets a weapon's shop card apart from
+   the mint-accented mutation/event cards around it. */
+.card.weapon{border-color:#5a441c}
+.card.weapon em{color:var(--gold)}
+.card.weapon:hover{border-color:var(--gold)}
+.buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+.button{padding:12px 21px;border:1px solid var(--mint);background:var(--mint);color:#08251e;font:800 12px monospace}
+.button.secondary{background:#12242b;color:var(--mint);border-color:#35594f}
+button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible{outline:2px solid white;outline-offset:3px}
+.stats{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;margin:22px 0}
+.stats b{display:block;color:var(--mint);font:700 25px monospace}
+.stats small{color:var(--muted);font-size:10px}
+.badge{display:inline-block;padding:5px 9px;margin:3px;background:#243727;color:var(--mint);font:11px monospace}
+/* Same weapon-vs-mutation split as .card.weapon above, applied to the
+   BUILD screen's owned-gear badges. */
+.badge.weapon{background:#2a2013;color:var(--gold)}
+.pathmap{display:flex;justify-content:center;align-items:center;gap:5px;flex-wrap:wrap;margin:18px 0 -4px}
+.pn{display:flex;gap:2px;padding:3px;border:1px solid #223140;border-radius:4px;background:#0c1422a0}
+.pn.now{border-color:var(--mint)}
+.pn.done .pn-opt{opacity:.22}
+.pn.done .pn-opt.picked{opacity:1}
+.pn.next .pn-opt{opacity:.5}
+.pn.now .pn-opt{opacity:.9}
+.pn.boss{margin-left:3px}
+.pn-opt{width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 8px monospace;border:1px solid var(--c);color:var(--c);background:transparent}
+.pn-opt.picked{background:var(--c);color:#04121b}
+.pn.boss .pn-opt{width:19px;height:19px;font-size:10px}
+@media(max-width:700px){
+ .cards{gap:7px}.card{padding:12px;min-height:140px}
+ .card h3{font-size:14px}.card p{font-size:10px}.sub{font-size:11px}
+ .button{padding:9px 12px;font-size:10px}
+ .pathmap{margin:12px 0 -2px}
+ .pn-opt{width:12px;height:12px;font-size:7px}
+ .pn.boss .pn-opt{width:15px;height:15px;font-size:8px}
+}
+/* Short landscape viewports (phones in the recommended orientation) don't
+   have room for the room-choice/mutation panel at full size — it must fit
+   without scrolling, since the cards are the primary action. */
+@media(max-height:520px) and (pointer:coarse){
+ #overlay{padding:1.5% 4%}
+ .eyebrow{font-size:9px}
+ h1{font-size:19px;margin:4px 0}
+ .sub{font-size:10px;line-height:1.35;margin:4px auto}
+ .small{font-size:9px;line-height:1.4;margin:4px 0}
+ .pathmap{margin:6px 0 0}
+ .pn-opt{width:11px;height:11px;font-size:7px}
+ .pn.boss .pn-opt{width:14px;height:14px;font-size:8px}
+ .cards{gap:6px;margin:6px 0}
+ .card{min-height:0;padding:7px 9px}
+ .card em{font-size:8px}
+ .card h3{font-size:11px;margin:3px 0 2px}
+ .card p{font-size:9px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .card p.lore{display:none}
+ .card small{font-size:8px;margin-top:3px}
+ .buttons{margin-top:6px;gap:6px}
+ .button{padding:5px 10px;font-size:9px}
+ .stats{margin:8px 0;gap:14px}
+ .stats b{font-size:16px}
+}
+</style>
+</head>
+<body>
+<div id="hintStack">
+<div id="rotateHint">ROTATE TO LANDSCAPE FOR THE BEST EXPERIENCE</div>
+<div id="a2hsHint"><span id="a2hsText"></span><button type="button" id="a2hsClose">×</button></div>
+</div>
+<div id="stage">
+<canvas id="game"></canvas>
+<div id="overlay"></div>
+</div>
+<div id="touch">
+ <div id="joyZone"></div>
+ <div id="joyBase"></div>
+ <div id="joyKnob"></div>
+ <button type="button" id="btnDash" class="tbtn">DASH</button>
+ <button type="button" id="btnPulse" class="tbtn">PULSE</button>
+ <button type="button" id="btnPause" class="tbtn">II</button>
+</div>
+
+<script>
+"use strict";
+(()=>{
+const W=1200,H=800,TOP=100,BOTTOM=724,TAU=Math.PI*2;
+const C={
+ mint:"#71ffd0",gold:"#ffcf78",pink:"#ff7197",blue:"#79ceff",
+ violet:"#bda2ff",white:"#e8f4ff",muted:"#96aabd",bg:"#080e18",
+ spectral:"#d9e4ff"
+};
+
+const canvas=document.querySelector("#game");
+const ctx=canvas.getContext("2d");
+const overlay=document.querySelector("#overlay");
+const keys=new Set();
+
+const isTouch=matchMedia("(pointer:coarse)").matches;
+const touchUI=document.querySelector("#touch");
+
+// Ask for fullscreen on every menu tap so the mobile browser's address bar
+// gets out of the way. Must run from a user gesture, so it's called from
+// invoke() rather than on load. Deliberately retries every time rather than
+// giving up after the first exit — fullscreen can drop for reasons that
+// have nothing to do with the player choosing to leave it (an OS dialog,
+// pulling down the notification shade, rotating the device), and there's
+// no reliable way to tell that apart from a deliberate exit. Since this
+// only ever fires from a real tap, and is a no-op whenever already
+// fullscreen, retrying costs nothing and fixes the case where the player
+// gets kicked out and is then stuck without fullscreen for the rest of
+// the session.
+//
+// iPhone Safari has no Fullscreen API for ordinary page content at all
+// (requestFullscreen/webkitRequestFullscreen are both undefined there —
+// iPadOS and Android support it fine), so this silently does nothing on
+// an iPhone in a regular browser tab. The only genuine chrome-free
+// experience on iPhone is launching from a Home Screen icon, which the
+// apple-mobile-web-app meta tags above already support — see the
+// a2hsHint banner below for the fallback nudge toward that.
+const hasFullscreenAPI=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+const isStandalone=navigator.standalone===true||matchMedia("(display-mode: standalone)").matches;
+function enterFullscreen(){
+ // Must check both the standard and the webkit-prefixed property — some
+ // Android browsers/WebViews only ever populate webkitFullscreenElement,
+ // never the unprefixed one. Checking only fullscreenElement there means
+ // this always thinks it's not fullscreen, even while it already is, and
+ // calls webkitRequestFullscreen() again on every single menu tap. Calling
+ // it while already (webkit-)fullscreen is what actually froze the page —
+ // not a lag, a wedged renderer requiring a reload.
+ if(!isTouch||document.fullscreenElement||document.webkitFullscreenElement)return;
+ const el=document.documentElement;
+ const req=el.requestFullscreen||el.webkitRequestFullscreen;
+ if(req)req.call(el).catch(()=>{});
+}
+
+// Nudge iPhone Safari users (the one case with no real fullscreen option)
+// toward Add to Home Screen instead. Dismissed once, remembered forever —
+// read/write/t/UI are all defined further down, but this only ever runs
+// from maybeShowA2hsHint() below, called after the whole script has run.
+const a2hsHint=document.querySelector("#a2hsHint");
+const a2hsText=document.querySelector("#a2hsText");
+const A2HS_DISMISSED_KEY="void-bloom-a2hs-dismissed";
+function maybeShowA2hsHint(){
+ if(!isTouch||isStandalone||hasFullscreenAPI||read(A2HS_DISMISSED_KEY,false))return;
+ a2hsText.textContent=t("a2hs_hint");
+ a2hsHint.classList.add("show");
+}
+document.querySelector("#a2hsClose").addEventListener("click",()=>{
+ a2hsHint.classList.remove("show");
+ write(A2HS_DISMISSED_KEY,true);
+});
+
+const joyZone=document.querySelector("#joyZone");
+const joyBase=document.querySelector("#joyBase");
+const joyKnob=document.querySelector("#joyKnob");
+const btnDash=document.querySelector("#btnDash");
+const btnPulse=document.querySelector("#btnPulse");
+const btnPause=document.querySelector("#btnPause");
+
+const touchMove={x:0,y:0};
+let joyId=null,joyOrigin={x:0,y:0};
+const JOY_RADIUS=52;
+
+function setJoy(clientX,clientY,originX,originY){
+ // #touch now spans the full viewport, so client coordinates map directly.
+ joyBase.style.left=originX+"px";
+ joyBase.style.top=originY+"px";
+ joyKnob.style.left=clientX+"px";
+ joyKnob.style.top=clientY+"px";
+}
+
+joyZone.addEventListener("pointerdown",e=>{
+ if(joyId!==null)return;
+ joyId=e.pointerId;
+ joyZone.setPointerCapture(joyId);
+ joyOrigin={x:e.clientX,y:e.clientY};
+ setJoy(e.clientX,e.clientY,e.clientX,e.clientY);
+ joyBase.classList.add("show");
+});
+
+joyZone.addEventListener("pointermove",e=>{
+ if(e.pointerId!==joyId)return;
+ let dx=e.clientX-joyOrigin.x;
+ let dy=e.clientY-joyOrigin.y;
+ const len=Math.hypot(dx,dy);
+ if(len>JOY_RADIUS){dx=dx/len*JOY_RADIUS;dy=dy/len*JOY_RADIUS;}
+ setJoy(joyOrigin.x+dx,joyOrigin.y+dy,joyOrigin.x,joyOrigin.y);
+ touchMove.x=dx/JOY_RADIUS;
+ touchMove.y=dy/JOY_RADIUS;
+});
+
+function joyRelease(e){
+ if(e.pointerId!==joyId)return;
+ joyId=null;
+ touchMove.x=0;
+ touchMove.y=0;
+ joyBase.classList.remove("show");
+}
+joyZone.addEventListener("pointerup",joyRelease);
+joyZone.addEventListener("pointercancel",joyRelease);
+
+function tapButton(el,fn){
+ el.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  fn();
+ });
+}
+tapButton(btnDash,()=>dash());
+tapButton(btnPulse,()=>pulse());
+tapButton(btnPause,()=>pause());
+
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
+const random=(a,b)=>a+Math.random()*(b-a);
+const choose=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{
+ const r=a.slice();
+ for(let i=r.length-1;i>0;i--){
+  const j=Math.floor(Math.random()*(i+1));
+  [r[i],r[j]]=[r[j],r[i]];
+ }
+ return r;
+};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({
+ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[c]));
+
+const read=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))??f}catch{return f}};
+const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+
+const MASTER_VOLUME=.35;
+let muted=read("void-bloom-muted",false);
+let shakeEnabled=read("void-bloom-shake",true);
+function toggleShake(){
+ shakeEnabled=!shakeEnabled;
+ write("void-bloom-shake",shakeEnabled);
+}
+let lang=read("void-bloom-lang","en");
+function setLang(l){
+ lang=l;
+ write("void-bloom-lang",l);
+ // The a2hs hint lives outside the show()-driven overlay system, so it
+ // needs its own refresh when the language changes while it's visible.
+ if(a2hsHint&&a2hsHint.classList.contains("show"))a2hsText.textContent=t("a2hs_hint");
+}
+// t(key) looks up a short structural UI string; content data (mutations,
+// bosses, notes, etc.) carries its own per-language fields instead, merged
+// in by localize() below, since those need id/max/etc. left untouched.
+function t(key){
+ return (UI[lang]&&UI[lang][key])??UI.en[key]??key;
+}
+// Overlays a content object's `<field>_pl` translations onto its base
+// (English) fields when Polish is active, leaving id/max/tag-free fields
+// like rank numbers untouched. Falls back to English for any field a
+// translation hasn't filled in.
+function localize(item){
+ if(lang!=="pl"||!item)return item;
+
+ const out={...item};
+ for(const k of Object.keys(item)){
+  if(k.endsWith("_pl"))continue;
+  if(item[k+"_pl"]!==undefined)out[k]=item[k+"_pl"];
+ }
+ return out;
+}
+
+const UI={
+ en:{
+  new_expedition:"NEW EXPEDITION",the_garden:"THE GARDEN",how_to_play:"HOW TO PLAY",
+  sound_on:"SOUND: ON",sound_off:"SOUND: OFF",
+  shake_on:"SHAKE: ON",shake_off:"SHAKE: OFF",
+  title_sub:"The garden has learned to punish hesitation.<br><b>Dash and pulse are emergency tools, not permanent movement abilities.</b>",
+  best_label:"BEST",victories_label:"VICTORIES",spores_label:"SPORES",
+  touch_hint:"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS",
+  keyboard_hint:"SPACE DASH · E PULSE · WASD / ARROWS MOVE",
+  back:"BACK",continue_btn:"CONTINUE",leave:"LEAVE",
+  tend_garden_title:"TEND THE <span>GARDEN</span>",
+  tend_garden_sub:"Spend spores on permanent upgrades. Every future expedition starts with whatever is unlocked here.",
+  maxed:"MAXED",rank_label:"RANK",spores_footer:"SPORES",
+  danger_title:"READ THE <span>DANGER</span>",
+  danger_sub:"Every enemy has a distinct silhouette and a visible health-shard bar. Chargers telegraph their rush. Snipers draw a firing line. Pink fields slow movement by 65% while you stand inside them.<br><br>Dash cooldowns are long and pulse energy is scarce. Do not spend either ability simply to move faster.",
+  dash_title:"DASH",dash_tag_touch:"BUTTON",dash_tag_key:"SPACE",
+  dash_desc:"A short emergency dash. Damages enemies crossed and grants invulnerability.",
+  dash_foot:"Cooldown: roughly 2.3–3.3 seconds.",
+  pulse_title:"PULSE",pulse_tag_key:"E",
+  pulse_desc:"Clears bullets and damages nearby enemies.",
+  pulse_foot:"Recharge is intentionally slow.",
+  enemies_title:"ENEMIES",enemies_tag:"READ",
+  enemies_desc:"Triangles rush, squares shoot, diamonds charge, hexagons soak hits and lumber, stars snipe, rings summon. Deeper in: spinning shuttles trail hazards, spiked orbs detonate, and octagons heal nearby allies — kill those first.",
+  enemies_foot:"Health shards show remaining HP.",
+  pathmap_title:"PATH MAP",pathmap_tag:"READ",
+  pathmap_desc:"The row above your choices previews the whole floor. Filled icons are rooms you've resolved; outlined icons are still open.",
+  pathmap_foot:"C combat · E elite · R rest · $ shop · ? unknown · G guardian",
+  reflection_title:"THE REFLECTION",reflection_tag:"???",
+  reflection_desc:"Something wearing your own silhouette occasionally crosses the field. It isn't your friend — but it isn't only your enemy either.",
+  reflection_foot:"It doesn't stay long.",
+  choose_frame_title:"CHOOSE YOUR <span>FRAME</span>",
+  choose_frame_sub:"Different frames change health, damage, movement, fire rate, and dash timing.",
+  frame_tag:"FRAME",hp_label:"HP",damage_label:"DAMAGE",base_dash_label:"BASE DASH",
+  head_start_title:"HEAD START — CHOOSE A <span>MUTATION</span>",
+  boss_title:"BOSS",guardian_tag:"GUARDIAN",boss_desc:(name)=>`${name} blocks the way into the next biome.`,
+  shop_title:"SHOP",scrap_suffix:"SCRAP",shop_desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",
+  route_sub_boss:"A guardian stands between you and the next biome. There is no way around it.",
+  route_sub_normal:"Choose the next pressure test. Not every path offers the same options.",
+  build_btn:"BUILD",title_btn:"TITLE",
+  room_label:"ROOM",level_label:"LEVEL",score_label:"SCORE",
+  rest_title:"REST — CHOOSE A <span>MUTATION</span>",
+  seed_title:"A SEED <span>CRACKS OPEN</span>",seed_desc:(amount)=>`Something valuable was buried here. +${amount} scrap.`,
+  remembers_title:"THE GARDEN <span>REMEMBERS</span>",remembers_desc:"Integrity restored, but nothing more.",
+  stirs_title:"SOMETHING <span>STIRS</span>",stirs_desc:(dmg)=>`An ambush costs ${dmg} integrity — but you salvage 60 scrap from the wreckage.`,
+  cache_title:"A CACHE <span>OVERGROWN</span>",cache_desc:"Thorns guard something useful. It costs 1 integrity to reach.",
+  unknown_mutation_title:"CHOOSE A <span>MUTATION</span>",
+  your_build_title:"YOUR <span>BUILD</span>",
+  dash_short:"DASH",pulse_short:"PULSE",energy_label:"ENERGY",
+  no_mutations:"No mutations yet.",
+  supply_cache_title:"SUPPLY <span>CACHE</span>",
+  supply_cache_sub:"Trade scrap for guaranteed upgrades. Everything here is permanent, but it costs what fighting would have earned instead.",
+  full_repair_title:"FULL REPAIR",full_repair_desc:"Restore integrity to maximum.",
+  reroll_token_title:"REROLL TOKEN",reroll_token_desc:"Gain one extra mutation reroll.",
+  reroll_foot:(n)=>`${n} REROLLS HELD`,
+  sold_out_title:"SOLD OUT",sold_out_desc:"Every mutation has already reached maximum rank.",
+  new_suffix:"NEW",
+  workshop_title:"WORKSHOP",workshop_tag:"ONE-TIME",
+  workshop_desc:"A single permanent upgrade, at a steep price. Only available to those who take no mutations.",
+  workshop_sub:"One purchase per workshop. Choose carefully — the offer won't change once you've seen it.",
+  workshop_closed_title:"WORKSHOP CLOSED",workshop_closed_desc:"You already spent this workshop's one upgrade. There's nothing left to buy here.",
+  workshop_maxed_desc:"Every workshop upgrade has already reached maximum rank.",
+  weathered_note_title:"WEATHERED NOTE",weathered_note_desc:"Someone left this behind. Reading it won't help you fight.",
+  note_reveal_title:"A WEATHERED <span>NOTE</span>",
+  level_up_title:"LEVEL UP — CHOOSE A <span>MUTATION</span>",
+  fully_bloomed_title:"FULLY <span>BLOOMED</span>",
+  fully_bloomed_desc:"Every mutation has reached its maximum rank. The garden has nothing left to offer — 2 integrity repaired instead.",
+  mutation_sub:"Read the cards. Your build is the main source of power.",
+  reroll_btn:(n)=>`REROLL (${n})`,refuse_btn:"REFUSE",
+  reclaims_title:"THE GARDEN <span>RECLAIMS YOU</span>",
+  reclaims_sub:"The expedition ends. Your memories remain.",
+  guardian_felled_title:"GUARDIAN FELLED — CHOOSE A <span>REWARD</span>",
+  stat_score:"SCORE",stat_kills:"KILLS",stat_rooms:"ROOMS",stat_mutations:"MUTATIONS",stat_spores:"SPORES",
+  take_root_title:"TAKE <span>ROOT</span>",
+  take_root_sub:"The room is paused. Your cooldowns do not refill while paused.",
+  resume:"RESUME",abandon:"ABANDON",
+  hud_integrity:"INTEGRITY",hud_endless:"ENDLESS",hud_guardian:"GUARDIAN",hud_wave:"WAVE",
+  hud_ready:"READY",
+  hazard_slow:"SLOW",hazard_warning:"WARNING",hazard_move:"MOVE",
+  boss_kill_label:"GUARDIAN FELLED",reflection_kill_label:"THE GARDEN YIELDS",
+  reflection_shattered_label:"REFLECTION SHATTERED",
+  kills_suffix:"KILLS",
+  final_boss_intro:"IT HAS SEEN ENOUGH",
+  enraged_label:"ENRAGED",
+  reflection_spawn_label:"A REFLECTION STIRS",
+  brood_mother_label:"BROOD MOTHER",overdrive_label:"OVERDRIVE",
+  pulse_label:"PULSE",
+  show_hint_touch:"TAP TO CHOOSE · LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS · II PAUSE",
+  show_hint_keys:"CLICK OR PRESS NUMBER KEYS · WASD / ARROWS MOVE · SPACE DASH · E PULSE · P PAUSE",
+  choice_fallback:"CHOICE",
+  a2hs_hint:"TIP: ADD TO HOME SCREEN FOR TRUE FULLSCREEN"
+ },
+ pl:{
+  new_expedition:"NOWA WYPRAWA",the_garden:"OGRÓD",how_to_play:"JAK GRAĆ",
+  sound_on:"DŹWIĘK: WŁ",sound_off:"DŹWIĘK: WYŁ",
+  shake_on:"WSTRZĄSY: WŁ",shake_off:"WSTRZĄSY: WYŁ",
+  title_sub:"Ogród nie wybacza wahania.<br><b>Unik i puls to ostatnia deska ratunku — nie sposób na stałe poruszanie się.</b>",
+  best_label:"REKORD",victories_label:"ZWYCIĘSTW",spores_label:"ZARODNIKÓW",
+  touch_hint:"STEROWANIE Z LEWEJ · PRZYCISKI UNIKU I PULSU",
+  keyboard_hint:"SPACJA – UNIK · E – PULS · WASD / STRZAŁKI – RUCH",
+  back:"WSTECZ",continue_btn:"DALEJ",leave:"WYJDŹ",
+  tend_garden_title:"PIELĘGNUJ <span>OGRÓD</span>",
+  tend_garden_sub:"Wydawaj zarodniki na trwałe ulepszenia. Każda kolejna wyprawa zaczyna się od tego, co tu odblokujesz.",
+  maxed:"MAX",rank_label:"RANGA",spores_footer:"ZARODNIKI",
+  danger_title:"POZNAJ <span>ZAGROŻENIE</span>",
+  danger_sub:"Każdy wróg ma odrębną sylwetkę i widoczny pasek zdrowia. Szarżujący zapowiadają atak. Snajperzy rysują linię strzału. Różowe pola spowalniają ruch o 65%, gdy w nich stoisz.<br><br>Czas odnowienia uniku jest długi, a energii pulsu nie starcza na wszystko. Nie marnuj żadnej z tych zdolności tylko po to, żeby szybciej biegać.",
+  dash_title:"UNIK",dash_tag_touch:"PRZYCISK",dash_tag_key:"SPACJA",
+  dash_desc:"Krótki awaryjny unik. Zadaje obrażenia mijanym wrogom i daje nietykalność.",
+  dash_foot:"Odnowienie: około 2,3–3,3 sekundy.",
+  pulse_title:"PULS",pulse_tag_key:"E",
+  pulse_desc:"Usuwa pociski i zadaje obrażenia pobliskim wrogom.",
+  pulse_foot:"Odnawia się celowo powoli.",
+  enemies_title:"WROGOWIE",enemies_tag:"INFO",
+  enemies_desc:"Trójkąty szarżują, kwadraty strzelają, romby atakują z rozbiegu, sześciokąty przyjmują trafienia i wolno się wloką, gwiazdy snajperują, pierścienie przyzywają posiłki. Głębiej: wirujące czółenka zostawiają za sobą pułapki, kolczaste kule wybuchają, a ośmiokąty leczą pobliskich sojuszników — zabijaj je najpierw.",
+  enemies_foot:"Odłamki zdrowia pokazują pozostałe HP.",
+  pathmap_title:"MAPA TRASY",pathmap_tag:"INFO",
+  pathmap_desc:"Rząd nad wyborami pokazuje podgląd całego piętra. Wypełnione ikony to pokoje już ukończone; obrysowane wciąż czekają.",
+  pathmap_foot:"C walka · E elita · R odpoczynek · $ sklep · ? nieznane · G strażnik",
+  reflection_title:"ODBICIE",reflection_tag:"???",
+  reflection_desc:"Czasem po polu walki przemyka coś, co wygląda jak ty. To nie przyjaciel — ale też nie tylko wróg.",
+  reflection_foot:"Nie zostaje długo.",
+  choose_frame_title:"WYBIERZ SWÓJ <span>SZKIELET</span>",
+  choose_frame_sub:"Różne szkielety zmieniają zdrowie, obrażenia, ruch, szybkostrzelność i czas uniku.",
+  frame_tag:"SZKIELET",hp_label:"HP",damage_label:"OBRAŻENIA",base_dash_label:"BAZOWY UNIK",
+  head_start_title:"START Z PRZEWAGĄ — WYBIERZ <span>MUTACJĘ</span>",
+  boss_title:"BOSS",guardian_tag:"STRAŻNIK",boss_desc:(name)=>`${name} zagradza drogę do kolejnego biomu.`,
+  shop_title:"SKLEP",scrap_suffix:"ZŁOMU",shop_desc:"Wydaj złom na naprawy, żetony przerzutu lub gwarantowaną mutację.",
+  route_sub_boss:"Strażnik stoi między tobą a kolejnym biomem. Nie da się go obejść.",
+  route_sub_normal:"Wybierz następną próbę. Nie każda ścieżka daje te same możliwości.",
+  build_btn:"BUDOWA",title_btn:"MENU",
+  room_label:"POKÓJ",level_label:"POZIOM",score_label:"WYNIK",
+  rest_title:"ODPOCZYNEK — WYBIERZ <span>MUTACJĘ</span>",
+  seed_title:"NASIONO <span>PĘKA</span>",seed_desc:(amount)=>`Coś cennego było tu zakopane. +${amount} złomu.`,
+  remembers_title:"OGRÓD <span>PAMIĘTA</span>",remembers_desc:"Integralność przywrócona, ale nic więcej.",
+  stirs_title:"COŚ SIĘ <span>PORUSZA</span>",stirs_desc:(dmg)=>`Zasadzka kosztuje ${dmg} integralności — ale odzyskujesz 60 złomu ze zniszczeń.`,
+  cache_title:"ZAROŚNIĘTA <span>SKRYTKA</span>",cache_desc:"Ciernie strzegą czegoś przydatnego. Dotarcie tam kosztuje 1 integralność.",
+  unknown_mutation_title:"WYBIERZ <span>MUTACJĘ</span>",
+  your_build_title:"TWOJA <span>BUDOWA</span>",
+  dash_short:"UNIK",pulse_short:"PULS",energy_label:"ENERGII",
+  no_mutations:"Brak mutacji.",
+  supply_cache_title:"SKRYTKA <span>ZAOPATRZENIA</span>",
+  supply_cache_sub:"Wymieniaj złom na gwarantowane ulepszenia. Są trwałe, ale kosztują tyle, ile mogłaby przynieść walka.",
+  full_repair_title:"PEŁNA NAPRAWA",full_repair_desc:"Przywraca integralność do maksimum.",
+  reroll_token_title:"ŻETON PRZERZUTU",reroll_token_desc:"Zyskaj dodatkowy przerzut mutacji.",
+  reroll_foot:(n)=>`PRZERZUTÓW: ${n}`,
+  sold_out_title:"WYPRZEDANE",sold_out_desc:"Każda mutacja osiągnęła już maksymalną rangę.",
+  new_suffix:"NOWOŚĆ",
+  workshop_title:"WARSZTAT",workshop_tag:"JEDNORAZOWO",
+  workshop_desc:"Jedno trwałe ulepszenie za wysoką cenę. Dostępne tylko dla tych, którzy nie biorą mutacji.",
+  workshop_sub:"Jeden zakup na warsztat. Wybieraj rozważnie — oferta się nie zmieni.",
+  workshop_closed_title:"WARSZTAT ZAMKNIĘTY",workshop_closed_desc:"Jedyne ulepszenie tego warsztatu zostało już wykorzystane. Nie ma tu już nic do kupienia.",
+  workshop_maxed_desc:"Każde ulepszenie warsztatu osiągnęło już maksymalną rangę.",
+  weathered_note_title:"ZWIETRZAŁA NOTATKA",weathered_note_desc:"Ktoś to tu zostawił. W walce ci to nie pomoże.",
+  note_reveal_title:"ZWIETRZAŁA <span>NOTATKA</span>",
+  level_up_title:"NOWY POZIOM — WYBIERZ <span>MUTACJĘ</span>",
+  fully_bloomed_title:"W PEŁNI <span>ROZKWITŁY</span>",
+  fully_bloomed_desc:"Każda mutacja osiągnęła maksymalną rangę. Ogród nie ma już nic do zaoferowania — zamiast tego odzyskujesz 2 integralności.",
+  mutation_sub:"Przeczytaj karty. Twoja budowa to główne źródło mocy.",
+  reroll_btn:(n)=>`PRZERZUĆ (${n})`,refuse_btn:"ODMÓW",
+  reclaims_title:"OGRÓD <span>ODZYSKUJE CIEBIE</span>",
+  reclaims_sub:"Wyprawa się kończy. Twoje wspomnienia pozostają.",
+  guardian_felled_title:"STRAŻNIK POKONANY — WYBIERZ <span>NAGRODĘ</span>",
+  stat_score:"WYNIK",stat_kills:"ZABÓJSTWA",stat_rooms:"POKOJE",stat_mutations:"MUTACJE",stat_spores:"ZARODNIKI",
+  take_root_title:"ZAPUŚĆ <span>KORZENIE</span>",
+  take_root_sub:"Pokój jest zatrzymany. Umiejętności nie odnawiają się w trakcie pauzy.",
+  resume:"WZNÓW",abandon:"PORZUĆ",
+  hud_integrity:"INTEGRALNOŚĆ",hud_endless:"NIESKOŃCZONE",hud_guardian:"STRAŻNIK",hud_wave:"FALA",
+  hud_ready:"GOTOWE",
+  hazard_slow:"WOLNO",hazard_warning:"UWAGA",hazard_move:"RUSZAJ",
+  boss_kill_label:"STRAŻNIK POKONANY",reflection_kill_label:"OGRÓD ZBIERA PLON",
+  reflection_shattered_label:"ODBICIE ROZTRZASKANE",
+  kills_suffix:"ZABÓJSTW",
+  final_boss_intro:"MA JUŻ DOŚĆ",
+  enraged_label:"WŚCIEKŁY",
+  reflection_spawn_label:"ODBICIE NADCIĄGA",
+  brood_mother_label:"MATKA ROJU",overdrive_label:"PRZECIĄŻENIE",
+  pulse_label:"PULS",
+  show_hint_touch:"DOTKNIJ, ABY WYBRAĆ · STEROWANIE Z LEWEJ · PRZYCISKI UNIKU I PULSU · II PAUZA",
+  show_hint_keys:"KLIKNIJ LUB WCIŚNIJ CYFRĘ · WASD / STRZAŁKI – RUCH · SPACJA – UNIK · E – PULS · P – PAUZA",
+  choice_fallback:"WYBÓR",
+  a2hs_hint:"WSKAZÓWKA: DODAJ DO EKRANU GŁÓWNEGO, BY GRAĆ NA PEŁNYM EKRANIE"
+ }
+};
+
+let audioCtx=null,masterGain=null,noiseBuffer=null,ambientNodes=null;
+
+function ensureAudio(){
+ if(audioCtx)return audioCtx;
+
+ try{
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=muted?0:MASTER_VOLUME;
+  masterGain.connect(audioCtx.destination);
+ }catch{
+  audioCtx=false;
+ }
+
+ return audioCtx;
+}
+
+function wakeAudio(){
+ const ctx=ensureAudio();
+ if(ctx&&ctx.state==="suspended")ctx.resume();
+}
+
+function toggleMute(){
+ muted=!muted;
+ write("void-bloom-muted",muted);
+ if(masterGain)masterGain.gain.value=muted?0:MASTER_VOLUME;
+}
+
+function tone(freq,duration,type="sine",vol=1,freqEnd=null,startDelay=0){
+ const ctx=ensureAudio();
+ if(!ctx)return;
+
+ const t0=ctx.currentTime+startDelay;
+ const osc=ctx.createOscillator();
+ const gain=ctx.createGain();
+
+ osc.type=type;
+ osc.frequency.setValueAtTime(freq,t0);
+ if(freqEnd)osc.frequency.exponentialRampToValueAtTime(Math.max(1,freqEnd),t0+duration);
+
+ gain.gain.setValueAtTime(vol,t0);
+ gain.gain.exponentialRampToValueAtTime(.001,t0+duration);
+
+ osc.connect(gain);
+ gain.connect(masterGain);
+ osc.start(t0);
+ osc.stop(t0+duration);
+}
+
+function getNoiseBuffer(ctx){
+ if(!noiseBuffer){
+  noiseBuffer=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);
+  const data=noiseBuffer.getChannelData(0);
+  for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+ }
+ return noiseBuffer;
+}
+
+function noiseBurst(duration,vol=1,filterFreq=1000,filterType="lowpass"){
+ const ctx=ensureAudio();
+ if(!ctx)return;
+
+ const t0=ctx.currentTime;
+ const src=ctx.createBufferSource();
+ const filter=ctx.createBiquadFilter();
+ const gain=ctx.createGain();
+
+ src.buffer=getNoiseBuffer(ctx);
+ filter.type=filterType;
+ filter.frequency.value=filterFreq;
+
+ gain.gain.setValueAtTime(vol,t0);
+ gain.gain.exponentialRampToValueAtTime(.001,t0+duration);
+
+ src.connect(filter);
+ filter.connect(gain);
+ gain.connect(masterGain);
+ src.start(t0);
+ src.stop(t0+duration);
+}
+
+const sfx={
+ click(){tone(700,.04,"square",.06)},
+ shoot(){tone(820+random(-40,40),.045,"square",.045,600)},
+ hit(){tone(140,.16,"sawtooth",.22,55);noiseBurst(.1,.12,350)},
+ enemyDeath(){tone(320,.12,"triangle",.14,70)},
+ dash(){noiseBurst(.15,.18,2200,"highpass")},
+ pulse(){tone(90,.4,"sine",.28,280);noiseBurst(.3,.18,1500)},
+ blast(){noiseBurst(.4,.32,300);tone(60,.4,"sine",.28,28)},
+ lance(){tone(500,.14,"sawtooth",.12,900)},
+ chain(){tone(700,.05,"square",.08,1400)},
+ wave(){tone(220,.1,"sawtooth",.1,140)},
+ bossSpawn(){tone(70,.7,"sawtooth",.24,220);tone(55,.9,"sine",.26,35,.15);noiseBurst(.5,.16,220)},
+ bossTell(){tone(240,.14,"square",.1,180)},
+ bossRadial(){noiseBurst(.12,.22,900);tone(320,.1,"square",.12,700)},
+ bossCharge(){tone(200,.5,"sawtooth",.2,950)},
+ bossSummon(){tone(500,.08,"sine",.12);tone(650,.08,"sine",.12,null,.06);tone(820,.1,"sine",.14,null,.12)},
+ bossHit(){tone(170,.05,"square",.05,110)},
+ bossEnrage(){tone(90,.6,"sawtooth",.26,45);noiseBurst(.4,.22,260)},
+ bossDefeat(){tone(120,.9,"sawtooth",.3,25);tone(300,.5,"triangle",.2,null,.25);tone(500,.7,"triangle",.22,null,.5)},
+ reflectionAppear(){tone(440,.3,"sine",.13,520);tone(437,.3,"sine",.1,517,.03);noiseBurst(.25,.1,3000,"highpass")},
+ reflectionLeave(){tone(500,.3,"sine",.1,900);noiseBurst(.3,.08,4000,"highpass")},
+ reflectionVolley(){tone(650,.05,"square",.07,1300);tone(647,.05,"square",.05,1297,.015)},
+ reflectionShatter(){tone(300,.25,"triangle",.18,900);noiseBurst(.3,.22,4000,"highpass");tone(150,.4,"sawtooth",.2,40,.1)},
+ overdrive(){tone(120,.3,"sawtooth",.22,480);tone(480,.15,"square",.14,900,.1);noiseBurst(.25,.16,2000)},
+ levelUp(){tone(523,.12,"sine",.16);tone(659,.12,"sine",.16,null,.09);tone(784,.22,"sine",.2,null,.18)},
+ roomClear(){tone(392,.15,"triangle",.18);tone(523,.15,"triangle",.18,null,.12);tone(659,.25,"triangle",.22,null,.24)},
+ victory(){tone(392,.16,"triangle",.2);tone(523,.16,"triangle",.2,null,.13);tone(659,.16,"triangle",.2,null,.26);tone(784,.4,"triangle",.25,null,.39)},
+ death(){tone(200,.8,"sawtooth",.28,35)},
+ purchase(){tone(600,.06,"sine",.14);tone(900,.1,"sine",.14,null,.06)},
+ wardenHeal(){tone(500,.18,"sine",.14,700);tone(650,.14,"sine",.12,850,.06)},
+ pause(){tone(400,.08,"sine",.09)}
+};
+
+function startAmbient(intense){
+ const ctx=ensureAudio();
+ if(!ctx||ambientNodes)return;
+
+ const osc1=ctx.createOscillator();
+ const osc2=ctx.createOscillator();
+ const filter=ctx.createBiquadFilter();
+ const gain=ctx.createGain();
+ const lfo=ctx.createOscillator();
+ const lfoGain=ctx.createGain();
+
+ // A boss fight swaps the fifth for a tritone and speeds/deepens the
+ // filter LFO — same drone, more tension.
+ osc1.type="sine";osc1.frequency.value=55;
+ osc2.type="sine";osc2.frequency.value=intense?55*1.414:55*1.5;
+ filter.type="lowpass";filter.frequency.value=intense?420:300;
+ gain.gain.value=0;
+ gain.gain.linearRampToValueAtTime(intense?.07:.05,ctx.currentTime+2);
+
+ lfo.frequency.value=intense?.12:.05;
+ lfoGain.gain.value=intense?220:150;
+ lfo.connect(lfoGain);
+ lfoGain.connect(filter.frequency);
+
+ osc1.connect(filter);
+ osc2.connect(filter);
+ filter.connect(gain);
+ gain.connect(masterGain);
+
+ osc1.start();
+ osc2.start();
+ lfo.start();
+
+ ambientNodes={osc1,osc2,lfo,gain};
+}
+
+function stopAmbient(){
+ if(!ambientNodes||!audioCtx)return;
+
+ const {osc1,osc2,lfo,gain}=ambientNodes;
+ const t=audioCtx.currentTime;
+
+ gain.gain.cancelScheduledValues(t);
+ gain.gain.setValueAtTime(gain.gain.value,t);
+ gain.gain.linearRampToValueAtTime(0,t+1);
+ osc1.stop(t+1.1);
+ osc2.stop(t+1.1);
+ lfo.stop(t+1.1);
+
+ ambientNodes=null;
+}
+
+const META="void-bloom-meta-final-v2";
+let meta=read(META,{best:0,wins:0,spores:0,upgrades:{}});
+meta.spores=meta.spores||0;
+meta.upgrades=meta.upgrades||{};
+let state="title",actions=[];
+let last=performance.now(),accumulator=0,visual=0,shake=0,deathFlash=0;
+const DEATH_FLASH_TIME=.4;
+let shopStock=null,shopStockDepth=null;
+
+let R=null,S=null,P=null,room=null;
+let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[],beams=[];
+
+function resize(){
+ const r=canvas.getBoundingClientRect();
+
+ // iOS briefly reports a zero-size rect mid-rotation; skip rather than
+ // collapse the canvas's backing buffer to 0x0 (which renders nothing).
+ if(!r.width||!r.height)return;
+
+ const scale=Math.min(devicePixelRatio||1,2);
+ canvas.width=Math.round(r.width*scale);
+ canvas.height=Math.round(r.height*scale);
+
+ // Publish the stage's letterbox geometry as CSS vars so the touch
+ // controls (now positioned relative to the full viewport) can sit in
+ // the side bars beside the stage instead of on top of the play field.
+ const barL=r.left,barR=innerWidth-r.right;
+ const root=document.documentElement.style;
+ root.setProperty("--barL",barL+"px");
+ root.setProperty("--barR",barR+"px");
+ root.setProperty("--stageTop",r.top+"px");
+ root.setProperty("--stageBottom",(innerHeight-r.bottom)+"px");
+ root.setProperty("--stageW",r.width+"px");
+ root.setProperty("--stageH",r.height+"px");
+
+ // Only usable as dedicated rails once they're wide enough for a 76px
+ // button plus breathing room; otherwise fall back to overlaying the
+ // stage's corners like before.
+ touchUI.classList.toggle("bars",barL>=92&&barR>=92);
+}
+addEventListener("resize",resize);
+
+// ResizeObserver reacts to the actual settled layout size instead of
+// guessing a delay after orientationchange, which iOS Safari can fire
+// before the rotation's layout has finished settling.
+if(window.ResizeObserver){
+ new ResizeObserver(resize).observe(canvas);
+}else{
+ addEventListener("orientationchange",()=>setTimeout(resize,300));
+}
+resize();
+
+
+const FRAMES=[
+ {id:"seed",name:"SEED",hp:6,speed:270,damage:15,rate:.29,dash:3.6,shots:1,
+  desc:"Balanced frame. Reliable weapons and average mobility.",
+  desc_pl:"Zrównoważony szkielet: solidna broń i przeciętna zwinność."},
+ {id:"thorn",name:"THORN",hp:4,speed:305,damage:11,rate:.27,dash:3.1,shots:2,
+  desc:"Fast and aggressive, but fragile.",
+  desc_pl:"Szybki i agresywny, ale kruchy."},
+ {id:"bastion",name:"BASTION",hp:8,speed:230,damage:23,rate:.41,dash:4.2,shots:1,
+  desc:"Slow, durable, and heavy-hitting.",
+  desc_pl:"Powolny i wytrzymały, ale bije jak młot."}
+];
+
+// Two lore lines per mutation: an "early" voice (still mostly the player's
+// own) and a "late" voice (once MUTATION_DEEP_THRESHOLD or more mutations
+// have been accepted this run) that drifts toward the garden's own idiom.
+// Plot stays incidental — nothing here ever states the premise outright.
+const MUTATION_DEEP_THRESHOLD=4;
+
+const MUTATIONS=[
+ ["power","Razor Petals",5,"+24% weapon damage.","WEAPON",
+  "The petals cut cleaner every time you let them. You almost feel it deciding for you.",
+  "You no longer ask what the blade wants. It already knew what you'd swing at.",
+  "+24% obrażeń broni.",
+  "Płatki tną coraz czyściej, kiedy im pozwalasz. Prawie czujesz, że to one decydują, a nie ty.",
+  "Nie pytasz już, czego chce ostrze. Ono i tak wie, w co uderzysz, zanim ty to wiesz."],
+ ["rate","Quickening",5,"Fire 16% faster.","WEAPON",
+  "Your hands move faster than your thoughts arrive. That used to bother you.",
+  "There's no lag between wanting and doing anymore. There's barely a you in between.",
+  "Strzela 16% szybciej.",
+  "Twoje dłonie działają szybciej, niż zdążysz pomyśleć. Kiedyś by cię to niepokoiło.",
+  "Między chęcią a czynem nie ma już żadnej zwłoki. Ty sam ledwie się między nimi mieścisz."],
+ ["spread","Forked Bloom",3,"Add one projectile per rank.","WEAPON",
+  "One shot becomes two. The garden likes symmetry. It's teaching you to like it too.",
+  "Everything you make branches now, the way roots branch, the way you branch.",
+  "Dodaje jeden pocisk na rangę.",
+  "Jeden strzał staje się dwoma. Ogród lubi symetrię — i uczy lubić ją także ciebie.",
+  "Wszystko, co teraz tworzysz, się rozgałęzia — tak jak korzenie. Tak jak ty."],
+ ["pierce","Needlework",3,"Projectiles pierce more enemies.","WEAPON",
+  "The thorn goes all the way through. It never used to. Neither did you, once.",
+  "Nothing stops at one anymore. Not the needle. Not you.",
+  "Pociski przebijają więcej wrogów.",
+  "Cierń przebija teraz na wylot. Kiedyś tak nie było — ty też kiedyś się zatrzymywałeś.",
+  "Nic już nie zatrzymuje się na jednym. Ani igła. Ani ty."],
+ ["speed","Wild Current",3,"+12% movement speed.","MOBILITY",
+  "The current is faster than your legs remember being. It isn't unpleasant.",
+  "You've stopped noticing where your feet decide to go without you.",
+  "+12% prędkości ruchu.",
+  "Prąd jest szybszy, niż pamiętają twoje nogi. To nawet nie jest nieprzyjemne.",
+  "Przestałeś już zauważać, dokąd chodzą twoje stopy — bez ciebie."],
+ ["dash","Slipstream",4,"Dash cooldown reduced by 10%.","DASH",
+  "The gap between one place and the next keeps shrinking. Convenient. Slightly wrong.",
+  "Distance is a suggestion the garden no longer bothers making to you.",
+  "Odnowienie uniku skrócone o 10%.",
+  "Odległość między jednym miejscem a drugim wciąż się kurczy. Wygodne. Ale coś tu nie gra.",
+  "Odległość to już tylko sugestia. Ogród przestał ci ją nawet podsuwać."],
+ ["wake","Afterimage",3,"Dash leaves damaging blooms.","DASH",
+  "You leave more of yourself behind with every step now. Something grows where you were.",
+  "The trail you leave is more you than you are. It's doing fine without the rest of you.",
+  "Unik zostawia raniące kwiaty.",
+  "Zostawiasz teraz coraz więcej siebie za każdym krokiem. Coś rośnie tam, gdzie byłeś.",
+  "Ślad, który zostawiasz za sobą, jest bardziej tobą niż ty sam. Reszta już mu niepotrzebna."],
+ ["armor","Living Armor",4,"+1 maximum HP and repair 2.","SURVIVAL",
+  "The garden mends you before you finish flinching. You didn't ask it to.",
+  "It isn't healing anymore. It's just deciding you were never hurt.",
+  "+1 maks. HP i naprawia 2.",
+  "Ogród naprawia cię, zanim zdążysz się skrzywić z bólu. Nie prosiłeś go o to.",
+  "To już nie jest leczenie. To po prostu decyzja, że nigdy nie zostałeś zraniony."],
+ ["pulse","Event Horizon",4,"Pulse damage increases and it takes less energy to trigger.","PULSE",
+  "Something in your chest learned to push back. It wasn't there before you arrived.",
+  "The pulse doesn't come from you. You just happen to be where it comes out.",
+  "Obrażenia pulsu rosną, a do jego odpalenia potrzeba mniej energii.",
+  "Coś w twojej piersi nauczyło się odpychać. Nie było tego, zanim tu przybyłeś.",
+  "Puls nie pochodzi od ciebie. Ty tylko akurat stoisz tam, gdzie on wychodzi."],
+ ["battery","Photosynthesis",3,"Pulse recharges faster.","PULSE",
+  "You feel steadier in the light here. You didn't used to need to.",
+  "You've stopped telling the difference between resting and rooting.",
+  "Puls odnawia się szybciej.",
+  "W tym świetle czujesz się pewniej. Kiedyś tego nie potrzebowałeś.",
+  "Przestałeś odróżniać odpoczynek od zapuszczania korzeni."],
+ ["frost","Winter Sap",3,"Shots slow enemies.","CONTROL",
+  "Something in your bite runs cold now. You don't remember choosing that.",
+  "You slow everything you touch. The garden calls this mercy.",
+  "Strzały spowalniają wrogów.",
+  "Coś w twoim ukąszeniu jest teraz zimne. Nie pamiętasz, żebyś to wybrał.",
+  "Spowalniasz wszystko, czego dotkniesz. Ogród nazywa to litością."],
+ ["burn","Ember Seeds",3,"Shots burn enemies.","CONTROL",
+  "A small fire follows your aim now, patient, like it's been waiting for permission.",
+  "You don't feel the heat anymore. You've become the kind of thing that doesn't need to.",
+  "Strzały podpalają wrogów.",
+  "Mały ogień podąża teraz tam, gdzie celujesz — cierpliwy, jakby czekał na pozwolenie.",
+  "Nie czujesz już ciepła. Stałeś się czymś, co go nie potrzebuje."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],loreEarly:x[5],loreLate:x[6],
+ desc_pl:x[7],loreEarly_pl:x[8],loreLate_pl:x[9]}));
+
+// Weapons are the player's own — not the garden's to give. They're always
+// bought back with scrap, never handed over for free, and their lore stays
+// one consistent, personal voice rather than drifting like mutations do.
+const WEAPONS=[
+ ["halo","Thorn Halo",3,"Orbiting blades that damage anything they touch.","ORBITAL",
+  "Yours, once — you're almost sure of it. It circles you now like it's still waiting to be picked back up properly.",
+  "Krążące ostrza raniące wszystko, czego dotkną.",
+  "Kiedyś twoje — jesteś tego prawie pewien. Krąży teraz wokół ciebie, jakby wciąż czekało, aż ktoś je porządnie podniesie."],
+ ["lance","Spore Lance",3,"A piercing beam fired at your target at intervals.","BEAM",
+  "It remembers the shape of your grip better than you do. Scrap bought it back. Scrap won't buy back the memory of holding it.",
+  "Przebijająca wiązka, raz na jakiś czas odpalana w cel.",
+  "Pamięta kształt twojego uchwytu lepiej niż ty sam. Złom ją odkupił. Złom nie odkupi wspomnienia trzymania jej."],
+ ["chain","Chain Spark",3,"A bolt that arcs to another nearby enemy on hit.","ARC",
+  "It used to jump between your hands, a trick you knew before you knew anything else. Some of you is still in the arc.",
+  "Pocisk, który po trafieniu przeskakuje na innego pobliskiego wroga.",
+  "Kiedyś skakała między twoimi dłońmi — sztuczka, którą znałeś, zanim poznałeś cokolwiek innego. Część ciebie wciąż jest w tym łuku."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5],
+ desc_pl:x[6],lore_pl:x[7]}));
+
+// The Workshop is a separate, run-only upgrade track for players who
+// refuse every mutation offer (mutationChoice's REFUSE button is the only
+// way to keep R.mutationPicks at 0 — see route() for where the Workshop
+// card only appears under that condition). It never touches rank()/
+// R.mods, so buying here never counts as "taking a mutation" and never
+// disqualifies the player from further Workshop visits.
+const WORKSHOP_UPGRADES=[
+ ["dmg","Focused Lens",3,"+15% weapon damage per rank.",
+  "+15% obrażeń broni na rangę."],
+ ["speed","Overclocked Servos",3,"+8% movement speed per rank.",
+  "+8% prędkości ruchu na rangę."],
+ ["hp","Reinforced Plating",3,"+2 maximum HP per rank.",
+  "+2 do maksymalnego HP na rangę."],
+ ["dash","Tempered Coils",3,"Dash cooldown reduced by 8% per rank.",
+  "Odnowienie uniku skrócone o 8% na rangę."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],desc_pl:x[4]}));
+
+// Notes are physical scraps of memory belonging to the garden's other
+// inhabitants — sometimes the player's own life before arriving, sometimes
+// an earlier attempt at leaving, sometimes someone else's entirely. Older
+// notes (deeper acts) decay into near-incoherence. Never confirms which is
+// which — that's the point.
+const NOTES=[
+ [
+  "I left the kettle on. That's the last thing I remember thinking. Not goodbye. A kettle.",
+  "There was a dog. I think there was a dog. I can still feel where it used to sit.",
+  "Rain on a window I can't place anymore. I know it mattered.",
+  "My hands used to smell like something. Bread, maybe. I miss having a smell that was mine.",
+  "I keep trying to remember a name that isn't 'you.' I had one."
+ ],
+ [
+  "The paths were different yesterday. I'm starting to think they're never the same twice, and I only just noticed.",
+  "It doesn't ask. It just makes room for you, the way water makes room for a stone.",
+  "I counted the flowers. Tomorrow there will be a different number, and I will have always known it.",
+  "Something in me agreed to this. I don't remember agreeing. I remember agreeing.",
+  "The hunger isn't mine anymore. It has better manners now."
+ ],
+ [
+  "Someone wrote this before me, I think. The handwriting keeps almost matching mine.",
+  "I found my own boot print going the wrong way. I don't remember walking back.",
+  "There is a version of this note where I warn you. I must have used it already.",
+  "We are not the first plant here. We are not even the first version of this plant.",
+  "If this feels familiar, it should. You may have written it."
+ ],
+ [
+  "the shape is kind it is kind it is",
+  "no door was ever a door it was always a wall being polite",
+  "i i i—the garden counts better than i i i",
+  "sleep well the roots say sleep well sleep the roots",
+  "not lost. arranged. not lost. arranged. not"
+ ]
+];
+
+const NOTES_PL=[
+ [
+  "Zostawiłam czajnik na kuchence. To ostatnia myśl, jaką pamiętam. Nie pożegnanie. Czajnik.",
+  "Był pies. Chyba był pies. Wciąż czuję, gdzie zwykł siadać.",
+  "Deszcz na szybie, której już nie umiem sobie przypomnieć. Wiem, że to miało znaczenie.",
+  "Moje ręce kiedyś czymś pachniały. Chlebem, może. Brakuje mi zapachu, który był mój.",
+  "Wciąż próbuję przypomnieć sobie imię, które nie brzmi \"ty\". Miałam jakieś."
+ ],
+ [
+  "Ścieżki były wczoraj inne. Zaczynam myśleć, że nigdy nie są takie same dwa razy, a dopiero teraz to zauważyłam.",
+  "Ono nie pyta. Po prostu robi ci miejsce, tak jak woda robi miejsce kamieniowi.",
+  "Policzyłam kwiaty. Jutro będzie inna liczba i zawsze będę to wiedziała.",
+  "Coś we mnie się na to zgodziło. Nie pamiętam, żebym się zgadzała. Pamiętam, że się zgadzam.",
+  "Głód nie jest już mój. Ma teraz lepsze maniery."
+ ],
+ [
+  "Ktoś napisał to przede mną, chyba. Pismo wciąż prawie pasuje do mojego.",
+  "Znalazłam własny ślad buta idący w złą stronę. Nie pamiętam, żebym zawracała.",
+  "Jest wersja tej notatki, w której cię ostrzegam. Musiałam już jej użyć.",
+  "Nie jesteśmy pierwszą rośliną tutaj. Nie jesteśmy nawet pierwszą wersją tej rośliny.",
+  "Jeśli to wydaje się znajome, powinno. Może to napisałeś ty."
+ ],
+ [
+  "kształt jest dobry jest dobry jest",
+  "żadne drzwi nigdy nie były drzwiami zawsze były tylko uprzejmą ścianą",
+  "ja ja ja—ogród liczy lepiej niż ja ja ja",
+  "śpij dobrze mówią korzenie śpij dobrze śpij korzenie",
+  "nie zgubiona. ułożona. nie zgubiona. ułożona. nie"
+ ]
+];
+
+// A brief on-canvas flash, not always shown, right at the moment of death —
+// first-person, uncertain, never explaining itself.
+const DEATH_ECHOES=[
+ "You have done this before.",
+ "The garden forgives you. It always does.",
+ "Was there a door, once?",
+ "Not your first bloom.",
+ "The shape remembers you better than you remember it.",
+ "Rest. You are almost correct.",
+ "Your name was—",
+ "It isn't cruelty. It never was.",
+ "The walls were always this close.",
+ "You keep coming back wrong.",
+ "Something outside is waiting. You think.",
+ "How many times, now?",
+ "You were someone, before the roots."
+];
+
+const DEATH_ECHOES_PL=[
+ "Robiłeś to już wcześniej.",
+ "Ogród ci wybacza. Zawsze wybacza.",
+ "Czy kiedyś były drzwi?",
+ "Nie twój pierwszy rozkwit.",
+ "Kształt pamięta cię lepiej, niż ty pamiętasz jego.",
+ "Odpocznij. Jesteś prawie właściwy.",
+ "Twoje imię brzmiało—",
+ "To nie okrucieństwo. Nigdy nim nie było.",
+ "Ściany zawsze były tak blisko.",
+ "Wciąż wracasz jakoś nie tak.",
+ "Coś na zewnątrz czeka. Tak myślisz.",
+ "Ile już razy?",
+ "Byłeś kimś, zanim pojawiły się korzenie."
+];
+
+const META_UPGRADES=[
+ ["vitality","Deep Roots",5,"+1 starting max HP per rank.",60,
+  "Głębokie Korzenie","+1 do startowego maks. HP na rangę."],
+ ["cache","Stocked Cache",5,"+10 starting scrap per rank.",40,
+  "Zaopatrzona Skrytka","+10 startowego złomu na rangę."],
+ ["memory","Spare Blooms",3,"+1 starting mutation reroll per rank.",100,
+  "Zapasowe Kwiaty","+1 startowy przerzut mutacji na rangę."],
+ ["headstart","Head Start",1,"Begin every run with one mutation already chosen.",250,
+  "Przewaga Startowa","Zaczynaj każdą wyprawę z jedną mutacją już wybraną."],
+ ["choice","Wider Bloom",2,"+1 mutation choice offered per rank.",90,
+  "Szerszy Rozkwit","+1 oferowana mutacja do wyboru na rangę."],
+ ["loadout","Salvaged Weapon",1,"Begin every run with one weapon already reclaimed at rank 1.",200,
+  "Odzyskana Broń","Zaczynaj każdą wyprawę z jedną bronią już odzyskaną na randze 1."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],baseCost:x[4],name_pl:x[5],desc_pl:x[6]}));
+
+const ENEMIES={
+ seeker:{hp:36,r:13,speed:94,color:C.pink,xp:3,shape:"triangle"},
+ gunner:{hp:62,r:16,speed:62,color:C.gold,xp:5,shape:"square"},
+ charger:{hp:82,r:18,speed:67,color:C.violet,xp:6,shape:"diamond"},
+ tank:{hp:210,r:26,speed:42,color:C.blue,xp:10,shape:"hex"},
+ sniper:{hp:75,r:15,speed:45,color:C.white,xp:7,shape:"star"},
+ summoner:{hp:125,r:21,speed:42,color:C.violet,xp:9,shape:"ring"},
+ mite:{hp:18,r:8,speed:160,color:C.mint,xp:1,shape:"mite"},
+ // Three later-act arrivals so the roster keeps growing past depth 7
+ // instead of just scaling the same seven types' numbers up forever.
+ weaver:{hp:140,r:17,speed:58,color:C.violet,xp:8,shape:"loom"},
+ cinderling:{hp:22,r:11,speed:230,color:C.gold,xp:5,shape:"burst"},
+ warden:{hp:95,r:19,speed:50,color:C.mint,xp:9,shape:"octagon"}
+};
+
+const BIOMES=[
+ {name:"VERDANT WRECK",name_pl:"ZIELONY WRAK",color:C.mint,bg:"#112820"},
+ {name:"MIRROR ARCHIVE",name_pl:"LUSTRZANE ARCHIWUM",color:C.violet,bg:"#211932"},
+ {name:"CINDER ENGINE",name_pl:"SILNIK ŻARU",color:C.gold,bg:"#2d2018"},
+ {name:"EVENT HORIZON",name_pl:"HORYZONT ZDARZEŃ",color:C.blue,bg:"#102334"}
+];
+
+const BOSSES=[
+ {name:"BLOOMSHEAR",color:C.mint},
+ {name:"THE CATALOGUER",color:C.violet},
+ {name:"FURNACE CORE",color:C.gold},
+ {name:"THE OCCULTATION",color:C.blue}
+];
+
+function isFinalBossRoom(){return Math.floor(R.depth/7)===3}
+
+function bossDepthAhead(){
+ const next=R.depth+1;
+ return next%7===0&&next<=28;
+}
+
+function rank(id){return R?.mods?.[id]||0}
+function weaponRank(id){return R?.weapons?.[id]||0}
+function metaRank(id){return meta.upgrades[id]||0}
+function workshopRank(id){return R?.workshop?.[id]||0}
+function xpNeeded(){return Math.floor(48+R.level*30+Math.pow(R.level,1.35)*5)}
+function heal(n){R.hp=Math.min(S.maxHp,R.hp+n)}
+
+function calculate(){
+ const f=FRAMES.find(x=>x.id===R.frame)||FRAMES[0];
+
+ S={
+  // workshopRank folds in stat boosts bought at the boss-floor Workshop
+  // (see WORKSHOP_UPGRADES) — a separate, run-only track only available
+  // to players who never take a mutation, so it never touches rank()/
+  // R.mods and never counts toward R.mutationPicks.
+  maxHp:f.hp+rank("armor")+metaRank("vitality")+workshopRank("hp")*2,
+  speed:f.speed*(1+.12*rank("speed"))*(1+.08*workshopRank("speed")),
+  damage:f.damage*Math.pow(1.24,rank("power"))*(1+.15*workshopRank("dmg")),
+  rate:f.rate/Math.pow(1.16,rank("rate")),
+  shots:f.shots+rank("spread"),
+  pierce:rank("pierce"),
+  dashCD:f.dash*Math.pow(.9,rank("dash"))*Math.pow(.92,workshopRank("dash")),
+  dashDamage:70+30*rank("dash"),
+
+  // pulseCost is the energy meter's fill target, not a resource spent
+  // elsewhere — lowering it via the pulse mutation means less waiting
+  // before the meter reaches "ready," i.e. a faster effective recharge.
+ pulseCost:100*Math.pow(.95,rank("pulse")),
+pulseDamage:190+70*rank("pulse"),
+
+// Pulse now takes considerably longer to recharge.
+energyRate:.48+rank("battery")*.48
+ };
+
+ R.hp=Math.min(R.hp,S.maxHp);
+ if(P)P.energy=Math.min(P.energy,S.pulseCost);
+}
+
+function show(title,sub,cards=[],buttons=[],extra=""){
+ state="menu";
+ keys.clear();
+ actions=[];
+ touchUI.classList.remove("active");
+
+ const cardHTML=cards.map((a,i)=>{
+  if(!a.disabled)actions[i]=a.fn;
+  return `<button type="button" class="card${a.cardClass?" "+esc(a.cardClass):""}" data-action="${i}" ${a.disabled?"disabled":""}>
+   <em>${i+1} / ${esc(a.tag||t("choice_fallback"))}</em>
+   <h3>${esc(a.title)}</h3>
+   <p>${esc(a.desc||"")}</p>
+   ${a.lore?`<p class="lore">${esc(a.lore)}</p>`:""}
+   ${a.foot?`<small>${esc(a.foot)}</small>`:""}
+  </button>`;
+ }).join("");
+
+ const buttonHTML=buttons.map((a,i)=>{
+  const n=cards.length+i;
+  if(!a.disabled)actions[n]=a.fn;
+  return `<button type="button" class="button ${a.secondary?"secondary":""}" data-action="${n}" ${a.disabled?"disabled":""}>${esc(a.title)}</button>`;
+ }).join("");
+
+ overlay.innerHTML=`<div class="panel">
+  <div class="eyebrow">VOID BLOOM / ECHOES</div>
+  <h1>${title}</h1>
+  <div class="sub">${sub}</div>
+  ${extra}
+  ${cards.length?`<div class="cards">${cardHTML}</div>`:""}
+  <div class="buttons">${buttonHTML}</div>
+  <div class="small">${isTouch?t("show_hint_touch"):t("show_hint_keys")}</div>
+ </div>`;
+
+ overlay.classList.remove("hidden");
+ overlay.querySelectorAll("[data-action]").forEach(b=>{
+  b.addEventListener("click",()=>invoke(Number(b.dataset.action)));
+ });
+}
+
+function invoke(i){
+ const fn=actions[i];
+ if(typeof fn!=="function")return;
+ wakeAudio();
+ enterFullscreen();
+ sfx.click();
+ actions=[];
+ fn();
+}
+
+function hide(){
+ overlay.classList.add("hidden");
+ keys.clear();
+ actions=[];
+ state="playing";
+ if(isTouch)touchUI.classList.add("active");
+}
+
+function title(){
+ R=null;S=null;P=null;room=null;
+ enemies=[];bullets=[];orbs=[];hazards=[];
+ stopAmbient();
+
+ show("VOID BLOOM<br><span>ECHOES</span>",
+  t("title_sub"),
+  [],
+  [
+   {title:t("new_expedition"),fn:frameSelect},
+   {title:t("the_garden"),secondary:true,fn:garden},
+   {title:t("how_to_play"),secondary:true,fn:help},
+   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();title();}},
+   {title:shakeEnabled?t("shake_on"):t("shake_off"),secondary:true,fn:()=>{toggleShake();title();}},
+   {title:lang==="en"?"● EN":"EN",secondary:true,disabled:lang==="en",fn:()=>{setLang("en");title();}},
+   {title:lang==="pl"?"● PL":"PL",secondary:true,disabled:lang==="pl",fn:()=>{setLang("pl");title();}}
+  ],
+  `<div class="small">${t("best_label")} ${meta.best.toLocaleString()} · ${meta.wins} ${t("victories_label")} · ${meta.spores} ${t("spores_label")}<br>
+  ${isTouch?t("touch_hint"):t("keyboard_hint")}</div>`);
+}
+
+function upgradeCost(u,r){return u.baseCost*(r+1)}
+
+function garden(){
+ show(t("tend_garden_title"),
+  t("tend_garden_sub"),
+  META_UPGRADES.map(u=>{
+   const r=metaRank(u.id);
+   const maxed=r>=u.max;
+   const cost=upgradeCost(u,r);
+   const lu=localize(u);
+
+   return {
+    title:lu.name,
+    tag:maxed?t("maxed"):`${cost} ${t("spores_label")}`,
+    desc:lu.desc,
+    foot:`${t("rank_label")} ${r}/${u.max}`,
+    disabled:maxed||meta.spores<cost,
+    fn:()=>{
+     meta.spores-=cost;
+     meta.upgrades[u.id]=r+1;
+     write(META,meta);
+     sfx.purchase();
+     garden();
+    }
+   };
+  }),
+  [{title:t("back"),secondary:true,fn:title}],
+  `<div class="small">${t("spores_footer")} ${meta.spores}</div>`);
+}
+
+// The tutorial cards' own text gets 2-line-clamped on short/coarse
+// viewports (see the max-height:520px media query), which used to just
+// cut descriptions off with no way to read the rest — the cards had no
+// fn at all, so tapping one did nothing. Now tapping opens the same text
+// full-size in the .sub area, which is never clamped, with a BACK button
+// straight back to this list.
+function helpDetail(item){
+ show(item.title,
+  `${item.desc}${item.foot?`<br><br><span style="color:var(--gold)">${item.foot}</span>`:""}`,
+  [],
+  [{title:t("back"),fn:help}]);
+}
+
+function help(){
+ const items=[
+  {title:t("dash_title"),tag:isTouch?t("dash_tag_touch"):t("dash_tag_key"),desc:t("dash_desc"),foot:t("dash_foot")},
+  {title:t("pulse_title"),tag:isTouch?t("dash_tag_touch"):t("pulse_tag_key"),desc:t("pulse_desc"),foot:t("pulse_foot")},
+  {title:t("enemies_title"),tag:t("enemies_tag"),desc:t("enemies_desc"),foot:t("enemies_foot")},
+  {title:t("pathmap_title"),tag:t("pathmap_tag"),desc:t("pathmap_desc"),foot:t("pathmap_foot")},
+  {title:t("reflection_title"),tag:t("reflection_tag"),desc:t("reflection_desc"),foot:t("reflection_foot")}
+ ];
+ show(t("danger_title"),
+  t("danger_sub"),
+  items.map(c=>({...c,fn:()=>helpDetail(c)})),
+  [{title:t("back"),fn:title}]);
+}
+
+function frameSelect(){
+ show(t("choose_frame_title"),
+  t("choose_frame_sub"),
+  FRAMES.map(f=>{
+   const lf=localize(f);
+   return {
+    title:lf.name,tag:t("frame_tag"),desc:lf.desc,
+    foot:`${f.hp} ${t("hp_label")} · ${f.damage} ${t("damage_label")} · ${f.dash}s ${t("base_dash_label")}`,
+    fn:()=>begin(f.id)
+   };
+  }),
+  [{title:t("back"),secondary:true,fn:title}]);
+}
+
+function begin(frame){
+ R={
+  frame,depth:0,level:1,xp:0,
+  hp:0,
+  mods:{},weapons:{},kills:0,score:0,scrap:30+metaRank("cache")*10,time:0,
+  rerolls:2+metaRank("memory"),
+  lastReflectionDepth:-99,
+  mutationPicks:0,
+  firstCombatDone:false,
+  // Workshop state: workshop holds bought ranks (mirrors mods but is
+  // never touched by mutationChoice), workshopStock/workshopStockDepth
+  // pin the current boss floor's single random offer so leaving and
+  // re-entering doesn't re-roll it, and workshopUsedAtDepth records once
+  // that floor's one purchase has been made.
+  workshop:{},workshopStock:null,workshopStockDepth:null,workshopUsedAtDepth:null
+ };
+
+ // A new expedition always starts at depth 0 — without this, a shop the
+ // previous run visited at depth 0 would look "current" to shop()'s
+ // depth check below and hand its leftover stock to this brand-new run.
+ shopStock=null;
+ shopStockDepth=null;
+ calculate();
+ R.hp=S.maxHp;
+
+ if(metaRank("loadout"))R.weapons[choose(WEAPONS).id]=1;
+
+ if(metaRank("headstart")){
+  mutationChoice(route,t("head_start_title"));
+ }else{
+  route();
+ }
+}
+
+const NODE_INFO={
+ combat:{title:"COMBAT",title_pl:"WALKA",tag:"3-5 WAVES",tag_pl:"3-5 FAL",desc:"Escalating enemy waves.",desc_pl:"Narastające fale wrogów.",fn:()=>enter("combat")},
+ elite:{title:"ELITE",title_pl:"ELITA",tag:"SIX WAVES",tag_pl:"SZEŚĆ FAL",desc:"Stronger enemies, faster projectiles, better rewards.",desc_pl:"Silniejsi wrogowie, szybsze pociski, lepsze nagrody.",fn:()=>enter("elite")},
+ rest:{title:"REST",title_pl:"ODPOCZYNEK",tag:"RECOVERY",tag_pl:"REGENERACJA",desc:"Repair 35% HP and choose a mutation. The depth still advances.",desc_pl:"Naprawia 35% HP i pozwala wybrać mutację. Głębokość mimo to wzrasta.",fn:rest},
+ shop:{title:"SHOP",title_pl:"SKLEP",tag:()=>`${R.scrap} ${t("scrap_suffix")}`,desc:"Spend scrap on repairs, reroll tokens, or a guaranteed mutation.",desc_pl:"Wydaj złom na naprawy, żetony przerzutu lub gwarantowaną mutację.",fn:shop},
+ unknown:{title:"UNKNOWN",title_pl:"NIEZNANE",tag:"???",desc:"An uncertain encounter. Could be a blessing, could cost you.",desc_pl:"Niepewne spotkanie. Może być błogosławieństwem, może cię kosztować.",fn:unknownEvent}
+};
+
+const NODE_COLOR={combat:"var(--ink)",elite:"var(--pink)",rest:"var(--mint)",shop:"var(--gold)",unknown:"var(--violet)"};
+const NODE_LETTER={combat:"C",elite:"E",rest:"R",shop:"$",unknown:"?"};
+
+function generateActMap(){
+ const pool=["elite","rest","shop","unknown"];
+ R.actMap=[];
+ R.actPicks=[];
+
+ for(let i=0;i<6;i++){
+  R.actMap.push(["combat",...shuffle(pool).slice(0,2)]);
+ }
+
+ R.mapAct=Math.floor(R.depth/7);
+}
+
+function pathMapHTML(){
+ if(!R.actMap)return "";
+
+ const cur=R.depth%7;
+ const cells=R.actMap.map((opts,i)=>{
+  const st=i<cur?"done":i===cur?"now":"next";
+  const pick=R.actPicks&&R.actPicks[i];
+  const opts_html=opts.map(id=>
+   `<span class="pn-opt${pick===id?" picked":""}" style="--c:${NODE_COLOR[id]}">${NODE_LETTER[id]}</span>`
+  ).join("");
+  return `<div class="pn ${st}">${opts_html}</div>`;
+ }).join("");
+
+ const bossState=cur>=6?"now":"next";
+
+ return `<div class="pathmap">${cells}<div class="pn boss ${bossState}"><span class="pn-opt picked" style="--c:var(--pink)">G</span></div></div>`;
+}
+
+function route(){
+ room=null;P=null;enemies=[];bullets=[];orbs=[];hazards=[];
+ // shopStock deliberately isn't reset here — route() also runs whenever
+ // the player merely backs out of the shop's own screen (its LEAVE
+ // button) without the room actually changing. Clearing it unconditionally
+ // meant leaving and re-entering the same shop re-rolled its entire stock
+ // for free, letting a player farm it for whatever they wanted with no
+ // cost. shop() below only regenerates when shopStockDepth no longer
+ // matches the current room, i.e. an actual new shop.
+
+ const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
+ const boss=bossDepthAhead()?BOSSES[Math.floor(R.depth/7)]:null;
+
+ let cards;
+
+ if(boss){
+  cards=[
+   {title:t("boss_title"),tag:t("guardian_tag"),desc:t("boss_desc")(boss.name),fn:()=>enter("boss")},
+   {title:t("shop_title"),tag:`${R.scrap} ${t("scrap_suffix")}`,desc:t("shop_desc"),fn:shop}
+  ];
+  // The Workshop is a mutation-free-run perk: taking a mutation at any
+  // point — before ever visiting one, or after using one — permanently
+  // removes it from the floor map for the rest of the expedition.
+  if(R.mutationPicks===0){
+   cards.push({title:t("workshop_title"),tag:t("workshop_tag"),desc:t("workshop_desc"),fn:workshop});
+  }
+ }else{
+  if(R.mapAct!==Math.floor(R.depth/7))generateActMap();
+
+  cards=R.actMap[R.depth%7].map(id=>{
+   const info=localize(NODE_INFO[id]);
+   return {title:info.title,tag:typeof info.tag==="function"?info.tag():info.tag,desc:info.desc,fn:info.fn};
+  });
+ }
+
+ const biomeName=localize(biome).name;
+
+ show(`${biomeName.split(" ")[0]} <span>${biomeName.split(" ").slice(1).join(" ")}</span>`,
+  boss?t("route_sub_boss"):t("route_sub_normal"),
+  cards,
+  [
+   {title:t("build_btn"),secondary:true,fn:build},
+   {title:t("title_btn"),secondary:true,fn:title}
+  ],
+  `${pathMapHTML()}<div class="small">${t("room_label")} ${R.depth+1} · ${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("score_label")} ${R.score}</div>`);
+}
+
+function rest(){
+ if(R.actPicks)R.actPicks[R.depth%7]="rest";
+ R.depth++;
+ heal(Math.ceil(S.maxHp*.35));
+ mutationChoice(route,t("rest_title"));
+}
+
+function unknownEvent(){
+ if(R.actPicks)R.actPicks[R.depth%7]="unknown";
+ R.depth++;
+
+ const roll=Math.random();
+
+ if(roll<.35){
+  const amount=40+Math.floor(R.depth*3);
+  R.scrap+=amount;
+  show(t("seed_title"),
+   t("seed_desc")(amount),
+   [],
+   [{title:t("continue_btn"),fn:route}]);
+ }else if(roll<.6){
+  heal(Math.ceil(S.maxHp*.5));
+  show(t("remembers_title"),
+   t("remembers_desc"),
+   [],
+   [{title:t("continue_btn"),fn:route}]);
+ }else if(roll<.85){
+  const dmg=Math.random()<.5?1:2;
+  R.hp-=dmg;
+  sfx.hit();
+
+  if(R.hp<=0){
+   beginDeath();
+   return;
+  }
+
+  R.scrap+=60;
+  show(t("stirs_title"),
+   t("stirs_desc")(dmg),
+   [],
+   [{title:t("continue_btn"),fn:route}]);
+ }else{
+  R.hp-=1;
+  sfx.hit();
+
+  if(R.hp<=0){
+   beginDeath();
+   return;
+  }
+
+  show(t("cache_title"),
+   t("cache_desc"),
+   [],
+   [{title:t("continue_btn"),fn:()=>mutationChoice(route,t("unknown_mutation_title"))}]);
+ }
+}
+
+function enter(type){
+ const endless=R.depth>=28;
+
+ // Plain combat rooms run either 3 or 5 waves (never a fixed 5 anymore —
+ // the original 5-wave-every-time pacing dragged, especially as the very
+ // first fight of a run). The first combat room is always the short one
+ // so a new run doesn't open with its longest possible fight; every
+ // combat room after that is a coin flip. Elite/boss/endless are
+ // unaffected. See wave() for the matching intensity ramp: a 3-wave room
+ // escalates faster per wave to stay "short but sharp" instead of just
+ // feeling like a truncated 5-wave room.
+ let combatWaves=5;
+ if(!endless&&type==="combat"){
+  combatWaves=R.firstCombatDone?choose([3,5]):3;
+  R.firstCombatDone=true;
+ }
+
+ room={
+  type:endless?"endless":type,
+  depth:R.depth+1,
+  wave:0,
+  maxWaves:endless?999:type==="elite"?6:combatWaves,
+  wait:1,
+  time:0,
+  pending:[],
+  kills:0,
+  target:endless?100+Math.floor((R.depth-27)*30):0,
+  clear:0,
+  bossSpawned:false
+ };
+
+ startCombat();
+}
+
+function startCombat(){
+ enemies=[];bullets=[];orbs=[];hazards=[];
+ P={
+  x:600,y:580,r:12,dx:0,dy:-1,angle:-Math.PI/2,
+  dash:0,dashCD:0,
+
+  // Pulse starts partly charged but cannot be spammed.
+  energy:22,
+
+  fire:0,inv:1,
+  hits:new Set(),orbit:0,wake:0,
+  lanceFire:0,chainFire:0
+ };
+ startAmbient(room.type==="boss");
+ hide();
+}
+
+// back defaults to route() since that's the screen this is normally
+// opened from (the floor map's BUILD button). The pause menu also has
+// its own BUILD button (mid-combat), which passes renderPause here
+// instead — otherwise BACK fell through to the default and called
+// route(), which resets room/P/enemies for a fresh floor visit. From
+// inside a live fight that silently abandoned the current room and
+// dumped the player back at the floor map, mid-combat, without warning.
+function build(back=route){
+ const mods=MUTATIONS.filter(x=>rank(x.id));
+ const owned=WEAPONS.filter(x=>weaponRank(x.id));
+
+ show(t("your_build_title"),
+  `${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("damage_label")} ${S.damage.toFixed(1)} · ${t("dash_short")} ${S.dashCD.toFixed(2)}s · ${t("pulse_short")} ${S.pulseCost.toFixed(0)} ${t("energy_label")}`,
+  [],
+  [{title:t("back"),fn:back}],
+  `<div>${owned.map(x=>`<span class="badge weapon">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":t("no_mutations"))}</div>`);
+}
+
+function pickNote(){
+ const tier=NOTES[Math.min(3,Math.floor(R.depth/7))];
+ return choose(tier);
+}
+
+function shop(){
+ // Only regenerate stock for an actual new shop (a different room depth)
+ // — not every time this screen is opened, or leaving via LEAVE and
+ // walking straight back in would re-roll it for free.
+ if(!shopStock||shopStockDepth!==R.depth){
+  const mpool=MUTATIONS.filter(x=>rank(x.id)<x.max);
+  const wpool=WEAPONS.filter(x=>weaponRank(x.id)<x.max);
+
+  shopStock={
+   mutation:mpool.length?choose(mpool).id:null,
+   // Weapons and notes are scarce finds, not guaranteed stock like the
+   // mutation offer — most shop visits won't have either.
+   weapon:(wpool.length&&Math.random()<.45)?choose(wpool).id:null,
+   note:Math.random()<.4?pickNote():null
+  };
+  shopStockDepth=R.depth;
+ }
+
+ // Priced against a normal combat room's ~55-60 scrap so one room's income
+ // affords about one purchase here, not a shopping spree.
+ const repairCost=Math.ceil((S.maxHp-R.hp)*12);
+ const rerollCost=40;
+ const noteCost=18;
+ const mut=shopStock.mutation?MUTATIONS.find(m=>m.id===shopStock.mutation):null;
+ const mutCost=mut?35+rank(mut.id)*30:0;
+ const wep=shopStock.weapon?WEAPONS.find(w=>w.id===shopStock.weapon):null;
+ const wepRank=wep?weaponRank(wep.id):0;
+ const wepCost=wep?50+wepRank*40:0;
+
+ const cards=[
+  {
+   title:t("full_repair_title"),
+   tag:`${repairCost} ${t("scrap_suffix")}`,
+   desc:t("full_repair_desc"),
+   foot:`${R.hp}/${S.maxHp} HP`,
+   disabled:R.hp>=S.maxHp||R.scrap<repairCost,
+   fn:()=>{
+    R.scrap-=repairCost;
+    heal(S.maxHp);
+    sfx.purchase();
+    shop();
+   }
+  },
+  {
+   title:t("reroll_token_title"),
+   tag:`${rerollCost} ${t("scrap_suffix")}`,
+   desc:t("reroll_token_desc"),
+   foot:t("reroll_foot")(R.rerolls),
+   disabled:R.scrap<rerollCost,
+   fn:()=>{
+    R.scrap-=rerollCost;
+    R.rerolls++;
+    sfx.purchase();
+    shop();
+   }
+  },
+  mut?{
+   title:mut.name,
+   tag:`${mutCost} ${t("scrap_suffix")}`,
+   desc:localize(mut).desc,
+   lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?localize(mut).loreLate:localize(mut).loreEarly,
+   foot:`${t("rank_label")} ${rank(mut.id)+1}/${mut.max}`,
+   disabled:R.scrap<mutCost,
+   fn:()=>{
+    R.scrap-=mutCost;
+    R.mods[mut.id]=rank(mut.id)+1;
+    R.mutationPicks++;
+    calculate();
+    if(mut.id==="armor")heal(2);
+    const remaining=MUTATIONS.filter(x=>rank(x.id)<x.max);
+    shopStock.mutation=remaining.length?choose(remaining).id:null;
+    sfx.purchase();
+    shop();
+   }
+  }:{
+   title:t("sold_out_title"),
+   tag:"—",
+   desc:t("sold_out_desc"),
+   disabled:true
+  }
+ ];
+
+ // Weapons are the player's own — reclaimed, never granted, always at a
+ // price. Unlike the mutation slot, this one isn't always stocked.
+ if(wep){
+  cards.push({
+   title:wep.name,
+   cardClass:"weapon",
+   tag:wepRank===0?`${wepCost} ${t("scrap_suffix")} · ${t("new_suffix")}`:`${wepCost} ${t("scrap_suffix")}`,
+   desc:localize(wep).desc,
+   lore:localize(wep).lore,
+   foot:`${t("rank_label")} ${wepRank+1}/${wep.max}`,
+   disabled:R.scrap<wepCost,
+   fn:()=>{
+    R.scrap-=wepCost;
+    R.weapons[wep.id]=wepRank+1;
+    calculate();
+    const remaining=WEAPONS.filter(x=>weaponRank(x.id)<x.max);
+    shopStock.weapon=remaining.length?choose(remaining).id:null;
+    sfx.purchase();
+    shop();
+   }
+  });
+ }
+
+ if(shopStock.note){
+  cards.push({
+   title:t("weathered_note_title"),
+   tag:`${noteCost} ${t("scrap_suffix")}`,
+   desc:t("weathered_note_desc"),
+   foot:"???",
+   disabled:R.scrap<noteCost,
+   fn:()=>{
+    R.scrap-=noteCost;
+    const noteIdx=NOTES[Math.min(3,Math.floor(R.depth/7))].indexOf(shopStock.note);
+    const text=lang==="pl"&&noteIdx>=0?NOTES_PL[Math.min(3,Math.floor(R.depth/7))][noteIdx]:shopStock.note;
+    shopStock.note=null;
+    sfx.purchase();
+    show(t("note_reveal_title"),
+     text,
+     [],
+     [{title:t("continue_btn"),fn:shop}]);
+   }
+  });
+ }
+
+ show(t("supply_cache_title"),
+  t("supply_cache_sub"),
+  cards,
+  [{title:t("leave"),secondary:true,fn:route}],
+  `<div class="small">${R.scrap} ${t("scrap_suffix")}</div>`);
+}
+
+function workshop(){
+ // Already spent this boss floor's one purchase — show a closed state
+ // instead of another offer. This check comes before the stock check
+ // below so a used workshop never rerolls into a fresh-looking offer.
+ if(R.workshopUsedAtDepth===R.depth){
+  show(t("workshop_closed_title"),
+   t("workshop_closed_desc"),
+   [],
+   [{title:t("leave"),secondary:true,fn:route}]);
+  return;
+ }
+
+ // Pin one random not-yet-maxed upgrade to this depth, same exploit-safe
+ // pattern as shop()'s shopStock/shopStockDepth — leaving via LEAVE and
+ // walking back in must not reroll the offer.
+ if(R.workshopStock===null||R.workshopStockDepth!==R.depth){
+  const pool=WORKSHOP_UPGRADES.filter(x=>workshopRank(x.id)<x.max);
+  R.workshopStock=pool.length?choose(pool).id:null;
+  R.workshopStockDepth=R.depth;
+ }
+
+ const up=R.workshopStock?WORKSHOP_UPGRADES.find(u=>u.id===R.workshopStock):null;
+
+ if(!up){
+  show(t("workshop_title"),
+   t("workshop_maxed_desc"),
+   [],
+   [{title:t("leave"),secondary:true,fn:route}]);
+  return;
+ }
+
+ const curRank=workshopRank(up.id);
+ // Deliberately steep — this is meant to cost roughly what several rooms'
+ // worth of scrap income would earn, since it's the only progression a
+ // no-mutation run gets besides its starting frame and weapons.
+ const cost=500+curRank*300;
+
+ const cards=[{
+  title:up.name,
+  tag:`${cost} ${t("scrap_suffix")}`,
+  desc:localize(up).desc,
+  foot:`${t("rank_label")} ${curRank+1}/${up.max}`,
+  disabled:R.scrap<cost,
+  fn:()=>{
+   R.scrap-=cost;
+   R.workshop[up.id]=curRank+1;
+   R.workshopUsedAtDepth=R.depth;
+   calculate();
+   sfx.purchase();
+   workshop();
+  }
+ }];
+
+ show(t("workshop_title"),
+  t("workshop_sub"),
+  cards,
+  [{title:t("leave"),secondary:true,fn:route}],
+  `<div class="small">${R.scrap} ${t("scrap_suffix")}</div>`);
+}
+
+function mutationChoice(done,title=null){
+ title=title||t("level_up_title");
+
+ // Weapons are never offered here — they're the player's own pieces, only
+ // ever reclaimed with scrap in the shop. This screen is purely the
+ // garden's gifts.
+ const pool=shuffle(MUTATIONS.filter(x=>rank(x.id)<x.max)).slice(0,3+metaRank("choice"));
+
+ if(!pool.length){
+  heal(2);
+  sfx.levelUp();
+  show(t("fully_bloomed_title"),
+   t("fully_bloomed_desc"),
+   [],
+   [{title:t("continue_btn"),fn:done}]);
+  return;
+ }
+
+ sfx.levelUp();
+ show(title,
+  t("mutation_sub"),
+  pool.map(m=>{
+   const current=rank(m.id);
+   const lm=localize(m);
+
+   return {
+    title:m.name,
+    tag:m.tag,
+    desc:lm.desc,
+    lore:R.mutationPicks>=MUTATION_DEEP_THRESHOLD?lm.loreLate:lm.loreEarly,
+    foot:`${t("rank_label")} ${current+1}/${m.max}`,
+    fn:()=>{
+     R.mods[m.id]=current+1;
+     R.mutationPicks++;
+     if(m.id==="armor")heal(2);
+     calculate();
+     done();
+    }
+   };
+  }),
+  [
+   {
+    title:t("reroll_btn")(R.rerolls),
+    secondary:true,
+    disabled:R.rerolls<=0,
+    fn:()=>{
+     R.rerolls--;
+     mutationChoice(done,title);
+    }
+   },
+   {
+    // Without a way to decline, the 0-mutation ending is unreachable —
+    // levels (and thus mutation offers) happen automatically from combat
+    // XP, with no other way through a run.
+    title:t("refuse_btn"),
+    secondary:true,
+    fn:done
+   }
+  ]);
+}
+
+function levelCheck(done){
+ if(R.xp<xpNeeded()){
+  done();
+  return;
+ }
+
+ R.xp-=xpNeeded();
+ R.level++;
+ mutationChoice(()=>levelCheck(done));
+}
+
+function spawn(type,x,y,elite=false){
+ const base=ENEMIES[type];
+ if(!base||enemies.length>=48)return null;
+
+ if(x===undefined){
+  const side=Math.floor(Math.random()*4);
+  x=side===0?35:side===1?W-35:random(40,W-40);
+  y=side===2?TOP+35:side===3?BOTTOM-35:random(TOP+35,BOTTOM-35);
+ }
+
+ const difficulty=
+  (1+R.depth*.17)*
+  (room.type==="elite"?1.3:1)*
+  (room.type==="endless"?1.35+R.depth*.015:1);
+
+ const e={
+  ...base,type,x,y,elite,
+  hp:base.hp*difficulty,
+  maxHp:base.hp*difficulty,
+  born:.7,dead:false,id:Math.random(),
+  tell:0,aim:0,fire:random(.5,1.8),charge:0,
+  phase:random(0,TAU),age:0,slow:0,burn:0,
+  orbitHit:0,hit:0
+ };
+
+ enemies.push(e);
+ return e;
+}
+
+function wave(){
+ room.wave++;
+ sfx.wave();
+
+ // First wave is identical regardless of room length; a 3-wave room then
+ // ramps up per additional wave nearly twice as fast as a 5-wave one, so
+ // it stays a short, sharp spike rather than reading as a 5-wave room
+ // that just stops early.
+ const perWaveGrowth=room.maxWaves===3?7:4;
+ let count=13+4+Math.floor(R.depth*.8)+(room.wave-1)*perWaveGrowth;
+ if(room.type==="elite")count+=9;
+
+ // Heavy, slow tanks lead the enemy roster; the ranged tri-shot gunner
+ // shows up later. Their arrival dilutes gunner's share of the pool, so
+ // the ranged threat naturally eases off right as tanks start soaking hits.
+ let pool=["seeker","seeker","seeker","tank"];
+ if(R.depth>1)pool.push("charger");
+ if(R.depth>3)pool.push("gunner","sniper");
+ if(R.depth>7)pool.push("summoner");
+ // The later acts keep introducing new threats instead of just scaling
+ // the same seven types' stats up forever.
+ if(R.depth>10)pool.push("weaver");
+ if(R.depth>15)pool.push("cinderling");
+ if(R.depth>21)pool.push("warden");
+
+ for(let i=0;i<count;i++){
+  room.pending.push({
+   at:room.time+.35+i*.25,
+   type:choose(pool)
+  });
+ }
+
+ label(
+  600,155,
+  `${t("hud_wave")} ${room.wave}/${room.maxWaves}`,
+  room.type==="elite"?C.gold:C.white,
+  1.5
+ );
+
+ // An occasional chaotic-neutral encounter: a hostile echo of the player's
+ // own build that fires at whatever is nearest, friend or foe, then leaves.
+ if(
+  !room.reflectionSpawned&&
+  R.depth>=2&&
+  R.depth-R.lastReflectionDepth>=3&&
+  Math.random()<.2
+ ){
+  spawnReflection();
+ }
+}
+
+function makeHazard(){
+  const dangerous=room.type==="elite"||room.type==="endless";
+  const blast=dangerous&&Math.random()<.42;
+
+  hazards.push({
+    type:blast?"blast":"slow",
+    x:random(130,W-130),
+    y:random(TOP+100,BOTTOM-100),
+    r:blast?82:(dangerous?112:92),
+    delay:blast?1.25:.8,
+    age:0,
+    duration:blast?.48:(dangerous?8:6),
+    dead:false,
+    hit:false
+  });
+}
+
+function updateHazards(dt){
+  for(const h of hazards){
+    h.age+=dt;
+
+    if(h.type==="blast"){
+      const active=h.age>=h.delay;
+
+      if(active&&!h.hit){
+        h.hit=true;
+
+        if(distance(P,h)<h.r+P.r){
+          if(P.dash<=0)hurt();
+          if(!P)return;
+        }
+
+        // Damage enemies caught in the explosion.
+        for(const e of enemies){
+          if(!e.dead&&distance(e,h)<h.r+e.r){
+            damageEnemy(e,95);
+          }
+        }
+
+        sfx.blast();
+        ring(h.x,h.y,C.gold,h.r*1.5,.35);
+        burst(h.x,h.y,C.gold,30,260);
+        shake=7;
+      }
+    }
+
+    if(h.age>h.delay+h.duration){
+      h.dead=true;
+    }
+  }
+
+  hazards=hazards.filter(h=>!h.dead);
+}
+
+function playerSlowMultiplier(){
+ for(const h of hazards){
+  if(h.type==="slow"&&h.age>=h.delay&&distance(P,h)<h.r)return .35;
+ }
+ return 1;
+}
+
+function updatePlayer(dt){
+ P.inv=Math.max(0,P.inv-dt);
+ P.dashCD=Math.max(0,P.dashCD-dt);
+
+ // Slow energy regeneration. Kills no longer recharge pulse energy.
+ P.energy=Math.min(S.pulseCost,P.energy+S.energyRate*dt);
+ P.fire-=dt;
+ P.orbit+=dt*2.5;
+
+ const mx=+(keys.has("d")||keys.has("arrowright"))-
+  +(keys.has("a")||keys.has("arrowleft"))+touchMove.x;
+
+ const my=+(keys.has("s")||keys.has("arrowdown"))-
+  +(keys.has("w")||keys.has("arrowup"))+touchMove.y;
+
+ const len=Math.hypot(mx,my)||1;
+ const slow=playerSlowMultiplier();
+
+ if(P.dash>0){
+  P.x+=P.dx*1000*dt;
+  P.y+=P.dy*1000*dt;
+  P.dash-=dt;
+  P.wake-=dt;
+
+  if(rank("wake")&&P.wake<=0){
+   hazards.push({
+    type:"damage",
+    x:P.x,y:P.y,
+    r:38+rank("wake")*8,
+    delay:0,age:0,duration:1.2,dead:false
+   });
+   P.wake=.1;
+  }
+ }else{
+  P.x+=mx/len*S.speed*slow*dt;
+  P.y+=my/len*S.speed*slow*dt;
+
+  if(mx||my){
+   P.dx=mx/len;
+   P.dy=my/len;
+   P.angle=Math.atan2(P.dy,P.dx);
+  }
+ }
+
+ P.x=clamp(P.x,25,W-25);
+ P.y=clamp(P.y,TOP+25,BOTTOM-25);
+
+ if(P.fire<=0)firePlayer();
+
+ for(const h of hazards){
+  if(h.type==="damage"){
+   for(const e of enemies){
+    if(!e.dead&&distance(e,h)<h.r+e.r){
+     damageEnemy(e,20*rank("wake")*dt);
+    }
+   }
+  }
+ }
+
+ updateWeapons(dt);
+}
+
+function updateWeapons(dt){
+ const haloCount=weaponRank("halo");
+
+ if(haloCount>0){
+  const haloDamage=18+weaponRank("halo")*10;
+
+  for(let i=0;i<haloCount;i++){
+   const a=P.orbit+i*TAU/haloCount;
+   const point={
+    x:P.x+Math.cos(a)*68,
+    y:P.y+Math.sin(a)*68
+   };
+
+   for(const e of enemies){
+    if(!e.dead&&!e.orbitHit&&distance(point,e)<e.r+10){
+     e.orbitHit=.25;
+     damageEnemy(e,haloDamage);
+    }
+   }
+  }
+ }
+
+ if(weaponRank("lance")>0){
+  P.lanceFire-=dt;
+
+  if(P.lanceFire<=0){
+   const target=nearest(P.x,P.y);
+
+   if(target){
+    const a=angle(P,target);
+    const range=420;
+    const ex=P.x+Math.cos(a)*range;
+    const ey=P.y+Math.sin(a)*range;
+    const damage=26+weaponRank("lance")*14;
+
+    for(const e of enemies){
+     if(!e.dead&&pointSegment(e.x,e.y,P.x,P.y,ex,ey)<e.r+6){
+      damageEnemy(e,damage);
+     }
+    }
+
+    beams.push({x1:P.x,y1:P.y,x2:ex,y2:ey,life:.15,max:.15,color:C.violet});
+    sfx.lance();
+    P.lanceFire=1.7-weaponRank("lance")*.15;
+   }
+  }
+ }
+
+ if(weaponRank("chain")>0){
+  P.chainFire-=dt;
+
+  if(P.chainFire<=0){
+   let source={x:P.x,y:P.y};
+   const hitIds=new Set();
+   const jumps=weaponRank("chain")+1;
+   const damage=20+weaponRank("chain")*10;
+   let any=false;
+
+   for(let i=0;i<jumps;i++){
+    let best=null,bestDist=270;
+
+    for(const e of enemies){
+     if(e.dead||e.born>0||hitIds.has(e.id))continue;
+
+     const d=Math.hypot(e.x-source.x,e.y-source.y);
+     if(d<bestDist){
+      bestDist=d;
+      best=e;
+     }
+    }
+
+    if(!best)break;
+
+    damageEnemy(best,damage);
+    hitIds.add(best.id);
+    beams.push({x1:source.x,y1:source.y,x2:best.x,y2:best.y,life:.2,max:.2,color:C.gold});
+    source={x:best.x,y:best.y};
+    any=true;
+   }
+
+   if(any){
+    sfx.chain();
+    P.chainFire=2.1-weaponRank("chain")*.15;
+   }
+  }
+ }
+}
+
+// Forked Bloom (and a frame's own base shot count) add bullets, not free
+// damage: each individual bullet hits softer as the volley gets wider, so
+// the total damage still rises with shot count but nowhere near linearly
+// (was a flat multiply — 4 shots meant 4x damage; now it tops out well
+// under 3x).
+function shotDamageMultiplier(shots){
+ return shots<=1?1:shots===2?.75:shots===3?.65:shots===4?.6:.55;
+}
+
+function firePlayer(){
+ const target=nearest(P.x,P.y);
+ if(!target)return;
+
+ P.angle=angle(P,target);
+
+ const perShotDamage=S.damage*shotDamageMultiplier(S.shots);
+
+ for(let i=0;i<S.shots;i++){
+  const spread=(i-(S.shots-1)/2)*.1;
+  bullet(P.x,P.y,P.angle+spread,760,true,perShotDamage);
+ }
+
+ sfx.shoot();
+ P.fire=S.rate;
+}
+
+function nearest(x,y){
+ let result=null,best=Infinity;
+
+ for(const e of enemies){
+  if(e.dead||e.born>0)continue;
+
+  const n=Math.hypot(e.x-x,e.y-y);
+  if(n<best){
+   best=n;
+   result=e;
+  }
+ }
+
+ return result;
+}
+
+// playerDmg is separate from `damage` (which is only ever used against
+// enemies, via damageEnemy) so overdrive enemies can hit the player harder
+// without touching the existing damage field's established meaning
+// elsewhere (e.g. the Reflection's much larger anti-enemy chaos damage).
+function bullet(x,y,a,speed,good,damage,ownerId=null,playerDmg=1){
+ if(bullets.length>700)return;
+
+ bullets.push({
+  x,y,px:x,py:y,
+  vx:Math.cos(a)*speed,
+  vy:Math.sin(a)*speed,
+  good,damage,ownerId,playerDmg,
+  life:good===true?2.3:6,
+  r:good===true?4:5,
+  hits:good===true?1+S.pierce:1,
+  seen:new Set(),
+  dead:false
+ });
+}
+
+function damageEnemy(e,damage){
+ if(!e||e.dead||e.born>0)return;
+
+ if(e.type==="boss"&&e.hit<=0){
+  sfx.bossHit();
+ }
+
+ e.hp-=damage;
+ e.hit=.08;
+
+ if(e.hp>0)return;
+
+ e.dead=true;
+
+ if(e.type==="boss"){
+  R.kills++;
+  room.kills++;
+  R.score+=e.isReflection?3000:2000;
+  R.scrap+=e.isReflection?200:150;
+  orbs.push({x:e.x,y:e.y,value:e.isReflection?60:40});
+
+  sfx.bossDefeat();
+  burst(e.x,e.y,e.color,60,320);
+  ring(e.x,e.y,e.color,140,.6);
+  shake=14;
+  label(e.x,e.y-60,e.isReflection?t("reflection_kill_label"):t("boss_kill_label"),e.color,1.8);
+  return;
+ }
+
+ if(e.type==="reflection"){
+  R.kills++;
+  room.kills++;
+  R.score+=400;
+  R.scrap+=20;
+  orbs.push({x:e.x,y:e.y,value:15});
+
+  sfx.reflectionShatter();
+  burst(e.x,e.y,C.spectral,40,260);
+  ring(e.x,e.y,C.spectral,90,.5);
+  shake=10;
+  label(e.x,e.y-50,t("reflection_shattered_label"),C.spectral,1.5);
+  return;
+ }
+
+ // Cinderling detonates whenever it dies, whether that's from gunfire or
+ // from reaching the player (see the suicide branch in updateEnemy) —
+ // one delayed blast hazard on its own spot, reusing the same hazard the
+ // player already knows to respect from tank explosions and BLOOMSHEAR's
+ // Root Snare.
+ if(e.type==="cinderling"){
+  hazards.push({
+   type:"blast",
+   x:e.x,y:e.y,r:60,
+   delay:.12,age:0,duration:.35,dead:false,hit:false
+  });
+ }
+
+ R.kills++;
+ room.kills++;
+ R.score+=e.elite?160:85;
+
+ // Brood-mother spawn is chaff by design — pure threat, no payout, so
+ // "slightly overwhelming" numbers can't be farmed for scrap or XP.
+ if(!e.noReward){
+  // Wave sizes run into the hundreds per room, so kill-scrap must stay
+  // small and mostly-elite or it dwarfs the room-clear/event rewards.
+  if(e.elite)R.scrap+=3;
+  else if(Math.random()<.25)R.scrap+=1;
+
+  // Pulse does not recharge from ordinary kills anymore.
+  orbs.push({x:e.x,y:e.y,value:e.xp});
+ }
+
+ sfx.enemyDeath();
+ burst(e.x,e.y,e.color,14,160);
+
+ if(room.type==="endless"&&room.kills%25===0){
+  label(P.x,P.y-40,`${room.kills} ${t("kills_suffix")}`,C.gold,1.2);
+}
+}
+
+function hurt(dmg=1){
+ if(P.inv>0||P.dash>0)return;
+
+ R.hp-=dmg;
+ P.inv=1.1;
+ shake=8;
+ sfx.hit();
+
+ if(R.hp<=0)beginDeath();
+}
+
+// A brief on-canvas flash at the moment of death, before the game-over
+// screen — not always shown, first-person, never explaining itself.
+function beginDeath(){
+ if(state==="dying")return;
+ state="dying";
+ deathFlash=DEATH_FLASH_TIME;
+
+ if(Math.random()<.7){
+  label(600,340,choose(lang==="pl"?DEATH_ECHOES_PL:DEATH_ECHOES),C.spectral,1.6);
+ }
+
+ setTimeout(()=>{
+  if(state==="dying")finish(false);
+ },900);
+}
+
+function spawnBoss(){
+ const idx=Math.min(3,Math.floor(R.depth/7));
+ const def=BOSSES[idx];
+ const hpScale=1+R.depth*.1;
+ // Doubled again on top of the previous 4x pass — still dying too fast
+ // per direct feedback that the first guardian (and by extension the
+ // rest) was still easier than an ordinary combat room.
+ const hp=13600*hpScale;
+
+ const boss={
+  type:"boss",shape:"boss",
+  // kind is the guardian's index into BOSSES — drives which signature
+  // move bossSpecialAttack below gives this fight, so no two guardians
+  // play the same beyond the shared radial/summon moves.
+  kind:idx,
+  name:def.name,color:def.color,
+  x:600,y:230,r:46,
+  hp,maxHp:hp,
+  elite:true,born:1.2,dead:false,id:Math.random(),
+  age:0,slow:0,burn:0,hit:0,orbitHit:0,
+  tell:0,aim:0,
+  // Every guardian opens its first attack quickly now, instead of giving
+  // the player a long free window right at the start of the fight.
+  attackIndex:0,attackTimer:1.6,
+  chargeState:0,chargeAim:0,chargeTimer:0,pullTimer:0,
+  enrageStage:0
+ };
+
+ enemies.push(boss);
+ sfx.bossSpawn();
+ return boss;
+}
+
+// The garden's last line of defense: a second, secret phase after the act-4
+// guardian falls. Built from the same boss template as every other
+// guardian (HP bar, telegraphs, enrage stages all come for free), but adds
+// a fourth attack — reflectionMirrorVolley — that scales with whatever
+// weapons and mutations the player actually brought into the fight.
+function spawnReflectionFinal(){
+ const hpScale=1+R.depth*.1;
+
+ // Scaled up in the same proportion as the four named guardians above.
+ const hp=18400*hpScale;
+
+ const boss={
+  type:"boss",shape:"boss",isReflection:true,
+  name:"THE REFLECTION",color:C.spectral,
+  x:600,y:230,r:44,
+  hp,maxHp:hp,
+  elite:true,born:1.4,dead:false,id:Math.random(),
+  age:0,slow:0,burn:0,hit:0,orbitHit:0,
+  tell:0,aim:0,
+  attackIndex:0,attackTimer:1.6,
+  chargeState:0,chargeAim:0,chargeTimer:0,pullTimer:0,
+  enrageStage:0
+ };
+
+ enemies.push(boss);
+ sfx.reflectionAppear();
+ sfx.bossSpawn();
+ label(600,175,t("final_boss_intro"),C.spectral,2.4);
+ return boss;
+}
+
+// Fires a spread whose width mirrors how much the player has invested in
+// their build (weapon ranks + spread mutation). In chaotic mode, half the
+// shots pick a random living enemy instead of the player — used by the
+// roaming encounter; the final boss always fires it player-only.
+function reflectionMirrorVolley(e,chaotic,dmgMult=1){
+ const shots=3+weaponRank("halo")+weaponRank("lance")+weaponRank("chain")+rank("spread");
+ const dmg=(14+R.depth*.6)*dmgMult;
+ const baseAngle=angle(e,P);
+
+ for(let i=0;i<shots;i++){
+  const spread=(i-(shots-1)/2)*.16;
+  let a=baseAngle+spread;
+
+  if(chaotic&&Math.random()<.5){
+   const foes=enemies.filter(x=>!x.dead&&x!==e&&x.type!=="reflection");
+   const foe=foes.length?choose(foes):null;
+   if(foe)a=angle(e,foe)+spread;
+  }
+
+  bullet(e.x,e.y,a,300,chaotic?"chaos":false,dmg,chaotic?e.id:null);
+ }
+
+ sfx.reflectionVolley();
+}
+
+// Each named guardian's signature move, replacing the generic charge that
+// used to fill every boss's attackIndex===1 slot — a straight-line dash
+// reads identically on all four fights, which was itself part of why they
+// felt interchangeable and easy. e.kind is the guardian's index into
+// BOSSES (set in spawnBoss); the secret REFLECTION phase has no kind and
+// falls through to the plain charge at the bottom, since it already
+// carries its own extra attack (reflectionMirrorVolley above).
+function bossSpecialAttack(e){
+ if(e.kind===0){
+  // BLOOMSHEAR - Root Snare: six delayed blast zones (doubled from three)
+  // erupt scattered around wherever the player is standing right now, so
+  // surviving means actually moving off the spot, not just micrododging
+  // bullets in place.
+  for(let i=0;i<6;i++){
+   const a=random(0,TAU);
+   const r=random(0,90);
+
+   hazards.push({
+    type:"blast",
+    x:clamp(P.x+Math.cos(a)*r,140,W-140),
+    y:clamp(P.y+Math.sin(a)*r,TOP+110,BOTTOM-110),
+    r:70,delay:.85,age:0,duration:.4,dead:false,hit:false
+   });
+  }
+
+  sfx.bossRadial();
+ }else if(e.kind===1){
+  // THE CATALOGUER - Mirrored Volley: the same build-scaling spread the
+  // Reflection encounters use, at double damage here — the stronger the
+  // player's own loadout, the wider and nastier this gets, fitting for a
+  // boss themed around cataloguing exactly what you brought in with you.
+  reflectionMirrorVolley(e,false,2);
+ }else if(e.kind===2){
+  // FURNACE CORE - Cinder Line: a fast, narrow line of heavy (doubled)
+  // shots fired straight down the player's position at cast time,
+  // instead of a wide spread — punishes staying on the sightline instead
+  // of just being somewhere in the open.
+  const a=angle(e,P);
+
+  for(let i=0;i<6;i++){
+   bullet(e.x+Math.cos(a)*i*22,e.y+Math.sin(a)*i*22,a,900,false,14);
+  }
+
+  sfx.bossCharge();
+ }else if(e.kind===3){
+  // THE OCCULTATION - Singularity Pull: drags the player toward the
+  // boss for a short window instead of the boss lunging at the player —
+  // fights the player's own movement input rather than being sidestepped
+  // by it, so this is now handled continuously in updateBoss below. Pull
+  // strength is doubled there too.
+  e.pullTimer=.6;
+  sfx.bossCharge();
+ }else{
+  e.chargeAim=angle(e,P);
+  e.chargeState=1;
+  e.chargeTimer=.65;
+  sfx.bossCharge();
+ }
+}
+
+function runBossAttack(e){
+ const cycleLen=e.isReflection?4:3;
+ e.attackIndex=(e.attackIndex+1)%cycleLen;
+
+ if(e.isReflection&&e.attackIndex===3){
+  reflectionMirrorVolley(e,false);
+  return;
+ }
+
+ if(e.attackIndex===0){
+  const hpFrac=e.hp/e.maxHp;
+  // Every guardian's radial burst is noticeably denser from the very
+  // first cast now, rather than only reaching this density near death.
+  const count=14+Math.floor((1-hpFrac)*8);
+
+  for(let i=0;i<count;i++){
+   // Doubled from 1 to 2 per bullet — with 14+ bullets per cast, the old
+   // value meant standing in the open during this attack barely mattered.
+   bullet(e.x,e.y,i*TAU/count,240,false,2);
+  }
+
+  sfx.bossRadial();
+ }else if(e.attackIndex===1){
+  bossSpecialAttack(e);
+ }else{
+  for(let i=0;i<4;i++){
+   spawn(choose(["seeker","gunner"]));
+  }
+
+  sfx.bossSummon();
+ }
+}
+
+function updateBoss(e,dt){
+ if(e.born>0){
+  e.born-=dt;
+  return;
+ }
+
+ e.age+=dt;
+ e.hit=Math.max(0,e.hit-dt);
+
+ const hpFrac=e.hp/e.maxHp;
+ const stage=hpFrac<.33?2:hpFrac<.66?1:0;
+ // Every guardian attacks meaningfully more often at every stage now —
+ // clamped so the enraged stage doesn't get uncomfortably close to the
+ // .9s attack tell itself.
+ const baseCycle=stage===2?1.6:stage===1?2.1:2.6;
+ const cycle=Math.max(1.3,baseCycle-.5);
+
+ if(stage>e.enrageStage){
+  e.enrageStage=stage;
+  sfx.bossEnrage();
+  label(e.x,e.y-70,t("enraged_label"),e.color,1.2);
+ }
+
+ // THE OCCULTATION's Singularity Pull runs on its own clock, independent
+ // of the charge/tell/idle state machine below, so it can keep dragging
+ // the player in even while the boss itself is mid-telegraph for its
+ // next attack. Clamped to the same bounds updatePlayer uses, since this
+ // runs after updatePlayer already clamped this frame. Pull strength
+ // doubled from 220 to 440 — the original was too gentle to meaningfully
+ // fight the player's own movement input.
+ if(e.pullTimer>0){
+  e.pullTimer-=dt;
+  const pa=angle(P,e);
+  P.x+=Math.cos(pa)*440*dt;
+  P.y+=Math.sin(pa)*440*dt;
+  P.x=clamp(P.x,25,W-25);
+  P.y=clamp(P.y,TOP+25,BOTTOM-25);
+ }
+
+ if(e.chargeState===1){
+  e.x+=Math.cos(e.chargeAim)*760*dt;
+  e.y+=Math.sin(e.chargeAim)*760*dt;
+  e.chargeTimer-=dt;
+  if(e.chargeTimer<=0)e.chargeState=0;
+ }else if(e.tell>0){
+  e.tell-=dt;
+  if(e.tell<=0)runBossAttack(e);
+ }else{
+  const a=angle(e,P);
+  const n=distance(e,P);
+  // Guardians used to go fully passive at close range, which is exactly
+  // what let a player camp just outside the radial burst and never get
+  // touched between telegraphed attacks. They now always keep closing in
+  // (just slower once already close, and 3x faster than before at both
+  // ranges), so standing still is never free.
+  const speed=n>150?285:135;
+  e.x+=Math.cos(a)*speed*dt;
+  e.y+=Math.sin(a)*speed*dt;
+
+  e.attackTimer-=dt;
+  if(e.attackTimer<=0){
+   e.tell=.9;
+   e.aim=angle(e,P);
+   e.attackTimer=cycle;
+   sfx.bossTell();
+  }
+ }
+
+ e.x=clamp(e.x,e.r+10,W-e.r-10);
+ e.y=clamp(e.y,TOP+e.r,BOTTOM-e.r-10);
+
+ if(distance(e,P)<e.r+P.r){
+  if(P.dash>0){
+   if(!P.hits.has(e.id)){
+    P.hits.add(e.id);
+    damageEnemy(e,S.dashDamage);
+   }
+  }else{
+   hurt();
+  }
+ }
+}
+
+// An occasional, optional-fight roaming encounter (not a boss-gate fight):
+// a chaotic-neutral echo of the player that wanders in, fires at whatever
+// is nearest regardless of side, and leaves on its own after a while
+// whether or not it's killed. See spawnReflectionFinal for its serious,
+// player-only-hostile counterpart at the true end of the run.
+function spawnReflection(){
+ const edge=choose(["left","right","top"]);
+ const pos=
+  edge==="left"?{x:-30,y:random(TOP+80,BOTTOM-80)}:
+  edge==="right"?{x:W+30,y:random(TOP+80,BOTTOM-80)}:
+  {x:random(160,W-160),y:TOP-30};
+
+ const e={
+  type:"reflection",shape:"reflection",
+  x:pos.x,y:pos.y,r:15,
+  hp:220+R.depth*10,maxHp:220+R.depth*10,
+  color:C.spectral,
+  born:.5,dead:false,id:Math.random(),
+  age:0,slow:0,burn:0,hit:0,orbitHit:0,
+  fire:1,
+  wanderX:random(300,900),wanderY:random(TOP+80,BOTTOM-80),wanderTimer:0,
+  life:random(9,13),leaving:false
+ };
+
+ enemies.push(e);
+ room.reflectionSpawned=true;
+ R.lastReflectionDepth=R.depth;
+ sfx.reflectionAppear();
+ label(e.x,e.y-30,t("reflection_spawn_label"),C.spectral,1.6);
+ return e;
+}
+
+function updateReflection(e,dt){
+ if(e.born>0){
+  e.born-=dt;
+  return;
+ }
+
+ e.age+=dt;
+ e.hit=Math.max(0,e.hit-dt);
+
+ if(!e.leaving){
+  e.life-=dt;
+
+  if(e.life<=0){
+   e.leaving=true;
+   sfx.reflectionLeave();
+  }
+ }
+
+ if(e.leaving){
+  const toLeft=e.x,toRight=W-e.x,toTop=e.y-TOP;
+  const dir=
+   toLeft<toRight&&toLeft<toTop?Math.PI:
+   toRight<toTop?0:
+   -Math.PI/2;
+
+  e.x+=Math.cos(dir)*260*dt;
+  e.y+=Math.sin(dir)*260*dt;
+
+  if(e.x<-60||e.x>W+60||e.y<TOP-60)e.dead=true;
+  return;
+ }
+
+ e.wanderTimer-=dt;
+
+ if(e.wanderTimer<=0){
+  e.wanderX=random(220,W-220);
+  e.wanderY=random(TOP+90,BOTTOM-90);
+  e.wanderTimer=random(1.4,2.4);
+ }
+
+ const a=angle(e,{x:e.wanderX,y:e.wanderY});
+ e.x+=Math.cos(a)*120*dt;
+ e.y+=Math.sin(a)*120*dt;
+ e.x=clamp(e.x,e.r+10,W-e.r-10);
+ e.y=clamp(e.y,TOP+e.r,BOTTOM-e.r-10);
+
+ e.fire-=dt;
+
+ if(e.fire<=0){
+  reflectionMirrorVolley(e,true);
+  e.fire=1.1;
+ }
+
+ if(distance(e,P)<e.r+P.r){
+  if(P.dash>0){
+   if(!P.hits.has(e.id)){
+    P.hits.add(e.id);
+    damageEnemy(e,S.dashDamage);
+   }
+  }else{
+   hurt();
+  }
+ }
+}
+
+const TANK_BOMB_TIME=1;
+
+function explodeTank(e){
+ const blastR=e.r+60;
+
+ if(distance(e,P)<blastR+P.r){
+  hurt(e.overdrive?4:2);
+ }
+
+ for(const o of enemies){
+  if(o===e||o.dead||o.type==="boss"||o.type==="reflection")continue;
+  if(distance(e,o)<blastR+o.r)damageEnemy(o,40);
+ }
+
+ sfx.blast();
+ burst(e.x,e.y,C.gold,36,300);
+ ring(e.x,e.y,C.gold,blastR,.5);
+ shake=10;
+
+ damageEnemy(e,e.hp);
+}
+
+function updateEnemy(e,dt){
+ if(e.dead)return;
+
+ if(e.type==="boss"){
+  updateBoss(e,dt);
+  return;
+ }
+
+ if(e.type==="reflection"){
+  updateReflection(e,dt);
+  return;
+ }
+
+ if(e.born>0){
+  e.born-=dt;
+  return;
+ }
+
+ e.age+=dt;
+ e.slow=Math.max(0,e.slow-dt);
+ e.orbitHit=Math.max(0,e.orbitHit-dt);
+ e.hit=Math.max(0,e.hit-dt);
+
+ // A tier-2 "mother" keeps spawning fresh, unmerged chaff of its own type
+ // at a fast clip — they carry no reward (see damageEnemy's noReward
+ // check), so they're pure crowd pressure, not something to farm.
+ if(e.mother){
+  e.motherTimer-=dt;
+
+  if(e.motherTimer<=0){
+   e.motherTimer=random(1.6,2.2);
+
+   for(let i=0;i<2;i++){
+    const child=spawn(e.type,e.x+random(-30,30),e.y+random(-30,30));
+    if(child)child.noReward=true;
+   }
+  }
+ }
+
+ // Tanks are slow but punish camping next to them: a short continuous
+ // stretch inside the danger zone triggers a self-destructing blast.
+ if(e.type==="tank"){
+  const dangerZone=e.r+60;
+
+  if(distance(e,P)<dangerZone){
+   e.bombTimer=(e.bombTimer||0)+dt;
+
+   if(e.bombTimer>=TANK_BOMB_TIME){
+    explodeTank(e);
+    return;
+   }
+  }else{
+   e.bombTimer=Math.max(0,(e.bombTimer||0)-dt*2);
+  }
+ }
+
+ // Weavers periodically drop a short-fused blast hazard on their own
+ // position as they drift, so they leave a spreading trail of delayed
+ // detonations behind them instead of threatening only through contact
+ // or gunfire — dodging one means reading and clearing its whole path,
+ // not just the enemy itself.
+ if(e.type==="weaver"){
+  e.trailTimer=(e.trailTimer||0)-dt;
+
+  if(e.trailTimer<=0){
+   e.trailTimer=.45;
+   hazards.push({
+    type:"blast",
+    x:e.x,y:e.y,r:30,
+    delay:.5,age:0,duration:.35,dead:false,hit:false
+   });
+  }
+ }
+
+ // Wardens are a support unit: they don't fight directly, they keep
+ // topping up nearby allies, so leaving one alive makes every other kill
+ // in the room take longer. That's meant to make it the first real
+ // priority target in the game instead of every enemy being equally
+ // worth killing first.
+ if(e.type==="warden"){
+  e.healTimer=(e.healTimer||0)-dt;
+
+  if(e.healTimer<=0){
+   e.healTimer=2.2;
+   let healed=false;
+
+   for(const o of enemies){
+    if(o===e||o.dead||o.born>0||o.type==="boss"||o.type==="warden")continue;
+
+    if(distance(o,e)<160&&o.hp<o.maxHp){
+     o.hp=Math.min(o.maxHp,o.hp+o.maxHp*.25);
+     healed=true;
+    }
+   }
+
+   if(healed){
+    ring(e.x,e.y,C.mint,160,.4);
+    sfx.wardenHeal();
+   }
+  }
+ }
+
+ const a=angle(e,P);
+ const n=distance(e,P);
+ // Tanks are the slowest thing in the roster, so their overdrive form
+ // triples speed instead of the standard 1.5x. That standard multiplier
+ // used to be 2x, but combined with the depth scaling above that meant
+ // even a merged seeker (let alone a mite) outran Bastion — the game's
+ // slowest frame — from as early as depth 8, making overdrive enemies
+ // flatly unescapable rather than just more dangerous for most of a run.
+ const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:1.5):1);
+
+ if(e.type==="charger"){
+  if(e.charge>0){
+   e.x+=Math.cos(e.aim)*620*(e.overdrive?2:1)*dt;
+   e.y+=Math.sin(e.aim)*620*(e.overdrive?2:1)*dt;
+   e.charge-=dt;
+  }else if(e.tell>0){
+   e.tell-=dt;
+   if(e.tell<=0)e.charge=.48;
+  }else{
+   e.x+=Math.cos(a)*speed*dt;
+   e.y+=Math.sin(a)*speed*dt;
+   e.fire-=dt;
+
+   if(e.fire<=0){
+    e.tell=.9;
+    e.aim=a;
+    e.fire=2.5;
+   }
+  }
+ }else{
+  // Warden never actually fires (its tell/fire timer just ticks over
+  // harmlessly) — it's grouped with the ranged types purely so it kites
+  // at a safe distance instead of rushing the player like a melee unit,
+  // fitting a support caster that would rather keep its allies topped up
+  // than get into a fight itself.
+  const ranged=["gunner","sniper","summoner","warden"].includes(e.type);
+  const preferred=e.type==="sniper"?450:290;
+  const movement=ranged?(n<preferred-65?-.75:n>preferred+45?1:0):1;
+
+  e.x+=Math.cos(a)*speed*movement*dt;
+  e.y+=Math.sin(a)*speed*movement*dt;
+
+  if(ranged){
+   if(e.tell>0){
+    e.tell-=dt;
+
+    // The sniper's telegraph line should track where it's actually about
+    // to shoot (recomputed at fire time below), not freeze at the angle
+    // from the instant the telegraph started.
+    if(e.type==="sniper")e.aim=a;
+
+    if(e.tell<=0){
+     if(e.type==="gunner"){
+      for(let i=-1;i<=1;i++){
+       bullet(e.x,e.y,a+i*.17,265,false,1,null,e.overdrive?2:1);
+      }
+     }
+
+     if(e.type==="sniper"){
+      bullet(e.x,e.y,a,620,false,1,null,e.overdrive?2:1);
+     }
+
+     if(e.type==="summoner"){
+      spawn("mite",e.x+20,e.y);
+      spawn("mite",e.x-20,e.y);
+     }
+
+     e.fire=e.type==="sniper"?2.8:2.3;
+    }
+   }else{
+    e.fire-=dt;
+
+    if(e.fire<=0){
+     e.tell=e.type==="sniper"?1.3:.8;
+     e.aim=a;
+    }
+   }
+  }
+ }
+
+ e.x=clamp(e.x,e.r+10,W-e.r-10);
+ e.y=clamp(e.y,TOP+e.r,BOTTOM-e.r-10);
+
+ if(distance(e,P)<e.r+P.r){
+  if(P.dash>0){
+   if(!P.hits.has(e.id)){
+    P.hits.add(e.id);
+    damageEnemy(e,S.dashDamage);
+   }
+  }else if(e.type==="cinderling"){
+   // A suicide rusher: reaching the player detonates it immediately
+   // (the same on-death fire patch as dying to gunfire) instead of just
+   // sitting there chipping away at contact like every other enemy.
+   hurt(e.overdrive?2:1);
+   damageEnemy(e,e.hp);
+  }else{
+   hurt(e.overdrive?2:1);
+  }
+ }
+}
+
+function updateBullets(dt){
+ for(const b of bullets){
+  if(b.dead)continue;
+
+  b.px=b.x;
+  b.py=b.y;
+  b.x+=b.vx*dt;
+  b.y+=b.vy*dt;
+  b.life-=dt;
+
+  if(
+   b.life<=0||
+   b.x<-30||b.x>W+30||
+   b.y<TOP-30||b.y>BOTTOM+30
+  ){
+   b.dead=true;
+   continue;
+  }
+
+  // "chaos" bullets (the roaming Reflection's chaotic-neutral fire) can
+  // hit either side; normal bullets stay exclusive to one.
+  const hitsEnemies=b.good===true||b.good==="chaos";
+  const hitsPlayer=b.good===false||b.good==="chaos";
+
+  if(hitsEnemies){
+   for(const e of enemies){
+    if(e.dead||e.id===b.ownerId||b.seen.has(e.id))continue;
+
+    if(pointSegment(e.x,e.y,b.px,b.py,b.x,b.y)<e.r+b.r){
+     b.seen.add(e.id);
+     damageEnemy(e,b.damage);
+
+     if(--b.hits<=0){
+      b.dead=true;
+      break;
+     }
+    }
+   }
+  }
+
+  if(hitsPlayer&&!b.dead&&pointSegment(P.x,P.y,b.px,b.py,b.x,b.y)<P.r+b.r){
+   b.dead=true;
+   hurt(b.playerDmg);
+   if(!P)return;
+  }
+ }
+
+ bullets=bullets.filter(b=>!b.dead);
+}
+
+function pointSegment(px,py,x1,y1,x2,y2){
+ const dx=x2-x1,dy=y2-y1;
+ const t=clamp(((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy||1),0,1);
+ return Math.hypot(px-x1-dx*t,py-y1-dy*t);
+}
+
+const MELTABLE=["seeker","gunner","charger","tank","sniper","summoner","mite","weaver","cinderling","warden"];
+const MERGE_TIME=5;
+
+// Punishes kiting a whole wave in a circle instead of thinning it out:
+// same-type, same-tier enemies that stay stacked on each other for
+// MERGE_TIME fuse into one "overdrive" body — double damage, double
+// speed, but not more total HP than either parent had, so a focused
+// player loses nothing by preventing it and an unfocused one trades
+// numbers for a sharper threat. Two already-merged (tier-1) enemies can
+// merge again into a tier-2 "mother", which cannot merge further.
+//
+// Mother-spawned (noReward) enemies are still allowed that first merge
+// (into tier-1), but never the second: a noReward tier-1 is excluded
+// from pairing again, so a mother's own brood can never produce another
+// mother. Without this, mother -> children -> merge -> merge -> new
+// mother is an unbounded spawn chain.
+function updateMerging(dt){
+ for(const e of enemies){
+  if(e.dead||e.born>0||e.mother||!MELTABLE.includes(e.type)||(e.overdrive&&e.noReward))continue;
+
+  let partner=null,bestDist=Infinity;
+
+  for(const o of enemies){
+   if(o===e||o.dead||o.born>0||o.mother||o.type!==e.type||o.overdrive!==e.overdrive||(o.overdrive&&o.noReward))continue;
+
+   const d=distance(e,o);
+   if(d<(e.r+o.r)*.55&&d<bestDist){
+    bestDist=d;
+    partner=o;
+   }
+  }
+
+  if(partner){
+   e.mergeTimer=(e.mergeTimer||0)+dt;
+   e.mergeWith=partner;
+
+   if(e.mergeTimer>=MERGE_TIME&&!e.dead&&!partner.dead){
+    mergeEnemies(e,partner);
+   }
+  }else{
+   e.mergeTimer=Math.max(0,(e.mergeTimer||0)-dt*2);
+   e.mergeWith=null;
+  }
+ }
+}
+
+function mergeEnemies(e,partner){
+ const mergedHp=Math.max(e.hp,partner.hp);
+ const mx=(e.x+partner.x)/2,my=(e.y+partner.y)/2;
+ const becomingMother=e.overdrive; // both parents already tier-1
+
+ const merged={
+  ...e,
+  id:Math.random(),
+  x:mx,y:my,
+  hp:mergedHp,maxHp:mergedHp,
+  r:e.r*1.3,
+  elite:e.elite||partner.elite,
+  born:.4,dead:false,overdrive:true,mother:becomingMother,
+  mergeTimer:0,mergeWith:null,
+  motherTimer:becomingMother?1.5:undefined,
+  // Taint spreads regardless of which parent this spread from — a
+  // hybrid of a mother's child and a normal enemy is still a dead end.
+  noReward:e.noReward||partner.noReward,
+  hit:0,orbitHit:0,slow:0,burn:0,age:0,
+  tell:0,charge:0,fire:random(.3,.9)
+ };
+
+ e.dead=true;
+ partner.dead=true;
+
+ enemies.push(merged);
+ sfx.overdrive();
+ burst(mx,my,C.pink,28,240);
+ ring(mx,my,C.pink,60,.5);
+ label(mx,my-e.r*1.3-16,becomingMother?t("brood_mother_label"):t("overdrive_label"),C.pink,1.2);
+}
+
+// Telegraphs an impending merge before it happens: a line between the
+// pairing enemies that thickens/brightens with progress, plus a pulsing
+// ring once they're past the halfway point — so a merge is something the
+// player can see coming and react to, not a surprise.
+function drawMergeTelegraphs(){
+ for(const e of enemies){
+  if(e.dead||!e.mergeWith||e.mergeWith.dead||!e.mergeTimer)continue;
+
+  const progress=Math.min(1,e.mergeTimer/MERGE_TIME);
+  const partner=e.mergeWith;
+
+  ctx.save();
+  ctx.globalAlpha=.2+progress*.6;
+  if(progress<1)ctx.setLineDash([6,6]);
+  line(e.x,e.y,partner.x,partner.y,C.pink,2+progress*4);
+  ctx.restore();
+
+  if(progress>.5){
+   const pulse=.6+Math.sin(visual*10)*.4;
+   ctx.save();
+   ctx.globalAlpha=(progress-.5)*2*pulse;
+   circle(e.x,e.y,e.r+10,C.pink,2);
+   ctx.restore();
+  }
+ }
+}
+
+function drawBombTelegraphs(){
+ for(const e of enemies){
+  if(e.dead||e.type!=="tank"||!e.bombTimer)continue;
+
+  const progress=Math.min(1,e.bombTimer/TANK_BOMB_TIME);
+  const dangerZone=e.r+60;
+
+  ctx.save();
+  ctx.globalAlpha=.15+progress*.5;
+  if(progress<1)ctx.setLineDash([5,7]);
+  circle(e.x,e.y,dangerZone,C.gold,2+progress*3);
+  ctx.restore();
+
+  if(progress>.6){
+   const pulse=.5+Math.sin(visual*16)*.5;
+   ctx.save();
+   ctx.globalAlpha=(progress-.6)*2.5*pulse;
+   circle(e.x,e.y,e.r+6,C.gold,3);
+   ctx.restore();
+  }
+ }
+}
+
+function update(dt){
+ if(state!=="playing"||!R||!P||!room)return;
+
+ R.time+=dt;
+ room.time+=dt;
+
+ updateHazards(dt);
+ if(!P)return;
+ updatePlayer(dt);
+
+ if(room.type!=="boss"&&room.time>4&&hazards.filter(h=>h.type==="slow").length<2){
+  makeHazard();
+ }
+
+ if(room.type==="endless"){
+  room.wait-=dt;
+
+  if(
+   room.kills<room.target&&
+   !room.pending.length&&
+   room.wait<=0
+  ){
+   wave();
+   room.wait=1.1;
+  }
+ }else if(room.type==="boss"){
+  if(!room.bossSpawned){
+   spawnBoss();
+   room.bossSpawned=true;
+  }else if(
+   isFinalBossRoom()&&
+   !room.finalPhase&&
+   !enemies.some(e=>e.type==="boss"&&!e.dead)
+  ){
+   // The act-4 guardian has fallen — the garden's real defense steps in.
+   room.finalPhase=true;
+   spawnReflectionFinal();
+  }
+ }else if(!room.pending.length&&!enemies.some(e=>!e.dead)){
+  room.wait-=dt;
+
+  if(room.wait<=0&&room.wave<room.maxWaves){
+   wave();
+   room.wait=1.5;
+  }
+ }
+
+ let safety=0;
+
+ while(
+  room.pending.length&&
+  room.pending[0].at<=room.time&&
+  enemies.length<48&&
+  safety<70
+ ){
+  const next=room.pending.shift();
+  spawn(
+   next.type,
+   undefined,
+   undefined,
+   room.type==="elite"&&Math.random()<.28
+  );
+  safety++;
+ }
+
+ for(const e of [...enemies]){
+  updateEnemy(e,dt);
+  if(!P)return;
+ }
+
+ updateMerging(dt);
+
+ updateBullets(dt);
+ if(!P)return;
+
+ enemies=enemies.filter(e=>!e.dead);
+
+ for(const o of orbs){
+  if(o.dead)continue;
+
+  const n=distance(o,P);
+
+  if(n<125){
+   const speed=330;
+   o.x+=(P.x-o.x)/Math.max(1,n)*Math.min(speed*dt,n);
+   o.y+=(P.y-o.y)/Math.max(1,n)*Math.min(speed*dt,n);
+  }
+
+  if(distance(o,P)<20){
+   R.xp+=o.value;
+   o.dead=true;
+  }
+ }
+
+ orbs=orbs.filter(o=>!o.dead);
+
+ const complete=room.type==="endless"
+  ?room.kills>=room.target&&!room.pending.length&&!enemies.length
+  :room.type==="boss"
+  ?room.bossSpawned&&!enemies.some(e=>e.type==="boss"&&!e.dead)&&(!isFinalBossRoom()||room.finalPhase)
+  :room.wave>=room.maxWaves&&!room.pending.length&&!enemies.length;
+
+ if(complete){
+  room.clear+=dt;
+
+  if(room.clear>.8){
+   completeRoom();
+   return;
+  }
+ }
+
+ if(R.xp>=xpNeeded()){
+  bullets=[];
+  levelCheck(hide);
+ }
+}
+
+function completeRoom(){
+ const wasBoss=room.type==="boss";
+ const trueVictory=wasBoss&&isFinalBossRoom()&&room.finalPhase;
+
+ if(R.actPicks&&(room.type==="combat"||room.type==="elite"))R.actPicks[R.depth%7]=room.type;
+ R.depth++;
+ R.score+=room.type==="elite"?900:wasBoss?1500:450;
+ R.scrap+=room.type==="elite"?50:wasBoss?100:25;
+ sfx.roomClear();
+
+ room=null;
+ P=null;
+ enemies=[];
+ bullets=[];
+ hazards=[];
+ orbs=[];
+
+ if(trueVictory){
+  // The Reflection was the garden's last defense — beating it is the
+  // game's one actual win condition (previously unused: finish(true)
+  // existed but nothing ever called it).
+  finish(true);
+ }else if(wasBoss){
+  mutationChoice(route,t("guardian_felled_title"));
+ }else{
+  route();
+ }
+}
+
+// Three victory texts off how many mutations were accepted this run
+// (weapons never count — see MUTATIONS/WEAPONS above). Same trigger, same
+// mechanical win, three very different outcomes.
+const ENDING_TIERS=[
+ {max:0,title:"THE SLEEPER <span>WAKES</span>",sub:"Nothing was left to hold your place. The garden opens its eyes for the first time in a very long while — and finds itself alone.",
+  title_pl:"ŚPIĄCY <span>BUDZI SIĘ</span>",sub_pl:"Nic nie zostało, by trzymać twoje miejsce. Ogród otwiera oczy po raz pierwszy od bardzo dawna — i widzi, że jest sam."},
+ {max:3,title:"YOU <span>LEAVE</span>",sub:"The gate remembers you enough to let you through. The world outside is loud, and fast, and none of it makes sense anymore. You'll learn. Probably.",
+  title_pl:"ODCHODZISZ",sub_pl:"Brama pamięta cię na tyle, by cię przepuścić. Świat na zewnątrz jest głośny, szybki i nic już w nim nie ma sensu. Nauczysz się. Może."},
+ {max:Infinity,title:"THE GARDEN <span>KEEPS</span> YOU",sub:"You beat your reflection. It doesn't matter. There was never enough of you left to walk through a door.",
+  title_pl:"OGRÓD <span>ZATRZYMUJE</span> CIEBIE",sub_pl:"Pokonałeś swoje odbicie. To nie ma znaczenia. Nigdy nie zostało z ciebie dość, by przejść przez drzwi."}
+];
+
+function finish(win){
+ meta.best=Math.max(meta.best,R.score);
+ if(win)meta.wins++;
+
+ // Depth-based, not score-based: wave sizes run into the hundreds per
+ // room, so score (like scrap before it was rebalanced) inflates far
+ // faster than actual progress. Tying meta-currency to depth rewards
+ // reaching further, not grinding one room's kill count.
+ const sporesEarned=R.depth*10+(win?200:0);
+ meta.spores+=sporesEarned;
+ write(META,meta);
+
+ stopAmbient();
+ win?sfx.victory():sfx.death();
+
+ const picks=R.mutationPicks||0;
+ const tier=win?ENDING_TIERS.find(tr=>picks<=tr.max):null;
+ const ending=tier?localize(tier):null;
+
+ show(
+  win?ending.title:t("reclaims_title"),
+  win?ending.sub:t("reclaims_sub"),
+  [],
+  [
+   {title:t("new_expedition"),fn:frameSelect},
+   {title:t("title_btn"),secondary:true,fn:title}
+  ],
+  `<div class="stats">
+   <div><b>${R.score.toLocaleString()}</b><small>${t("stat_score")}</small></div>
+   <div><b>${R.kills}</b><small>${t("stat_kills")}</small></div>
+   <div><b>${R.depth}</b><small>${t("stat_rooms")}</small></div>
+   <div><b>${picks}</b><small>${t("stat_mutations")}</small></div>
+   <div><b>+${sporesEarned}</b><small>${t("stat_spores")}</small></div>
+  </div>`
+ );
+
+ R=null;
+ P=null;
+ room=null;
+ enemies=[];
+ bullets=[];
+ hazards=[];
+ orbs=[];
+}
+
+function burst(x,y,color,count=10,speed=150){
+ for(let i=0;i<count;i++){
+  const a=random(0,TAU);
+  const v=random(speed*.2,speed);
+  const life=random(.2,.6);
+
+  particles.push({
+   x,y,
+   vx:Math.cos(a)*v,
+   vy:Math.sin(a)*v,
+   life,max:life,
+   color,
+   size:random(1,4)
+  });
+ }
+}
+
+function label(x,y,text,color=C.white,life=1){
+ labels.push({x,y,text,color,life,max:life});
+}
+
+function ring(x,y,color,r,life=.4){
+ rings.push({x,y,r,color,life,max:life});
+}
+
+function circle(x,y,r,color,width=0){
+ ctx.beginPath();
+ ctx.arc(x,y,r,0,TAU);
+
+ if(width){
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  ctx.stroke();
+ }else{
+  ctx.fillStyle=color;
+  ctx.fill();
+ }
+}
+
+function line(x1,y1,x2,y2,color,width=1){
+ ctx.beginPath();
+ ctx.moveTo(x1,y1);
+ ctx.lineTo(x2,y2);
+ ctx.strokeStyle=color;
+ ctx.lineWidth=width;
+ ctx.stroke();
+}
+
+function polygon(x,y,r,n,a,fill,stroke,width=2){
+ ctx.beginPath();
+
+ for(let i=0;i<n;i++){
+  const px=x+Math.cos(a+i*TAU/n)*r;
+  const py=y+Math.sin(a+i*TAU/n)*r;
+  i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+ }
+
+ ctx.closePath();
+
+ if(fill){
+  ctx.fillStyle=fill;
+  ctx.fill();
+ }
+
+ if(stroke){
+  ctx.strokeStyle=stroke;
+  ctx.lineWidth=width;
+  ctx.stroke();
+ }
+}
+
+function text(s,x,y,size=14,color=C.white,align="left"){
+ ctx.font=`600 ${size}px monospace`;
+ ctx.fillStyle=color;
+ ctx.textAlign=align;
+ ctx.textBaseline="middle";
+ ctx.fillText(s,x,y);
+}
+
+function bar(x,y,w,h,value,color){
+ ctx.fillStyle="#243344";
+ ctx.fillRect(x,y,w,h);
+ ctx.fillStyle=color;
+ ctx.fillRect(x,y,w*clamp(value,0,1),h);
+}
+
+function drawBackground(){
+ const biome=BIOMES[Math.min(3,Math.floor((room?.depth||0)/7))];
+
+ ctx.fillStyle=C.bg;
+ ctx.fillRect(0,0,W,H);
+
+ const gradient=ctx.createRadialGradient(600,410,30,600,410,650);
+ gradient.addColorStop(0,biome.bg);
+ gradient.addColorStop(1,C.bg);
+
+ ctx.fillStyle=gradient;
+ ctx.fillRect(0,TOP,W,BOTTOM-TOP);
+
+ for(let x=0;x<W;x+=48)line(x,TOP,x,BOTTOM,biome.color+"09");
+ for(let y=TOP;y<BOTTOM;y+=48)line(0,y,W,y,biome.color+"09");
+
+ line(20,TOP,W-20,TOP,biome.color+"66");
+ line(20,BOTTOM,W-20,BOTTOM,biome.color+"66");
+}
+
+function drawHazards(){
+  for(const h of hazards){
+    if(h.type==="slow"){
+      const active=h.age>=h.delay;
+
+      ctx.globalAlpha=active?.28:.1;
+      circle(h.x,h.y,h.r,C.pink);
+
+      ctx.globalAlpha=.9;
+      circle(h.x,h.y,h.r,C.pink,2);
+
+      text(
+        active?t("hazard_slow"):t("hazard_warning"),
+        h.x,h.y,12,C.pink,"center"
+      );
+    }
+
+    if(h.type==="blast"){
+      const charging=h.age<h.delay;
+      const progress=clamp(h.age/h.delay,0,1);
+
+      ctx.save();
+
+      if(charging){
+        // Warning circle contracts and pulses before impact.
+        const pulse=.5+.5*Math.sin(visual*12);
+        ctx.globalAlpha=.12+.1*pulse;
+        circle(h.x,h.y,h.r*(1.15-progress*.2),C.gold);
+
+        ctx.globalAlpha=.9;
+        circle(h.x,h.y,h.r*(1.2-progress*.2),C.gold,2);
+
+        ctx.globalAlpha=.8;
+        text(t("hazard_move"),h.x,h.y,13,C.gold,"center");
+      }else{
+        // Brief expanding blast animation.
+        const blastProgress=clamp(
+          (h.age-h.delay)/Math.max(.01,h.duration),
+          0,1
+        );
+
+        ctx.globalAlpha=.24*(1-blastProgress);
+        circle(
+          h.x,
+          h.y,
+          h.r*(1+blastProgress*.75),
+          C.gold
+        );
+
+        ctx.globalAlpha=.95*(1-blastProgress);
+        circle(
+          h.x,
+          h.y,
+          h.r*(1+blastProgress*.75),
+          C.gold,
+          4
+        );
+
+        ctx.globalAlpha=.8;
+        circle(h.x,h.y,h.r*.35,C.white);
+      }
+
+      ctx.restore();
+    }
+
+    if(h.type==="damage"){
+      // The Afterimage mutation's dash-trail blooms — fully functional
+      // (see the damage tick in updatePlayer) but previously had no
+      // draw case at all here, so they dealt damage with zero on-screen
+      // feedback. A small cluster of fading, slowly turning petals marks
+      // where a bloom actually is.
+      const fade=1-clamp(h.age/h.duration,0,1);
+      const petals=5;
+
+      ctx.save();
+      ctx.globalAlpha=.55*fade;
+
+      for(let i=0;i<petals;i++){
+        const a=i*TAU/petals+h.age*1.5;
+        circle(h.x+Math.cos(a)*h.r*.45,h.y+Math.sin(a)*h.r*.45,h.r*.32,C.mint);
+      }
+
+      ctx.globalAlpha=.85*fade;
+      circle(h.x,h.y,h.r*.22,C.mint);
+      ctx.restore();
+    }
+  }
+
+  ctx.globalAlpha=1;
+}
+
+function drawBoss(e){
+  if(e.born>0){
+    ctx.globalAlpha=.65;
+    circle(e.x,e.y,e.r+e.born*40,e.color,3);
+    ctx.globalAlpha=1;
+    return;
+  }
+
+  if(e.tell>0||e.chargeState===1){
+    ctx.save();
+    ctx.globalAlpha=.6;
+    ctx.setLineDash([8,9]);
+    circle(e.x,e.y,e.r+26,e.color,3);
+    ctx.restore();
+  }
+
+  if(e.isReflection){
+    const facing=angle(e,P);
+
+    for(let i=3;i>0;i--){
+      ctx.globalAlpha=.09*i;
+      drawArrow(e.x-Math.cos(facing)*i*13,e.y-Math.sin(facing)*i*13,facing,e.color,1.7);
+    }
+
+    ctx.globalAlpha=1;
+    drawArrow(e.x,e.y,facing,e.hit>0?C.white:e.color,1.9);
+  }else{
+    const fill=e.hit>0?C.white:"#1a1030";
+    polygon(e.x,e.y,e.r,7,e.age*.3,fill,e.color,5);
+  }
+
+  text(e.name,e.x,e.y-e.r-22,13,e.color,"center");
+}
+
+function drawReflection(e){
+  if(e.dead)return;
+
+  if(e.born>0){
+    ctx.globalAlpha=.6;
+    circle(e.x,e.y,e.r+e.born*30,C.spectral,2);
+    ctx.globalAlpha=1;
+    return;
+  }
+
+  const facing=angle(e,P);
+
+  for(let i=2;i>0;i--){
+    ctx.globalAlpha=.1*i;
+    drawArrow(e.x-Math.cos(facing)*i*10,e.y-Math.sin(facing)*i*10,facing,C.spectral,.85);
+  }
+
+  ctx.globalAlpha=(!e.leaving&&e.life<2)?.5+Math.abs(Math.sin(e.age*14))*.4:1;
+  drawArrow(e.x,e.y,facing,e.hit>0?C.white:C.spectral,.95);
+  ctx.globalAlpha=1;
+
+  if(e.hp<e.maxHp){
+    bar(e.x-24,e.y-e.r-18,48,4,Math.max(0,e.hp/e.maxHp),C.spectral);
+  }
+}
+
+function drawEnemy(e){
+  if(e.dead)return;
+
+  if(e.type==="boss"){
+    drawBoss(e);
+    return;
+  }
+
+  if(e.type==="reflection"){
+    drawReflection(e);
+    return;
+  }
+
+  if(e.born>0){
+    ctx.globalAlpha=.65;
+    circle(e.x,e.y,e.r+e.born*30,e.color,2);
+    ctx.globalAlpha=1;
+    return;
+  }
+
+  if(e.tell>0){
+    ctx.save();
+    ctx.globalAlpha=.6;
+    ctx.setLineDash([8,9]);
+
+    if(e.type==="charger"||e.type==="sniper"){
+      line(
+        e.x,e.y,
+        e.x+Math.cos(e.aim)*1000,
+        e.y+Math.sin(e.aim)*1000,
+        e.color,
+        e.type==="charger"?12:2
+      );
+    }else{
+      circle(e.x,e.y,e.r+18,e.color,2);
+    }
+
+    ctx.restore();
+  }
+
+  if(e.overdrive){
+    ctx.save();
+    ctx.globalAlpha=.5+Math.sin(e.age*9)*.3;
+    circle(e.x,e.y,e.r+9,C.pink,3);
+    ctx.restore();
+  }
+
+  const fill=e.hit>0?C.white:"#132330";
+
+  if(e.shape==="triangle"){
+    polygon(
+      e.x,e.y,e.r,3,angle(e,P),
+      fill,e.color,e.elite||e.overdrive?4:2
+    );
+  }else if(e.shape==="square"){
+    polygon(
+      e.x,e.y,e.r,4,
+      Math.PI/4+e.phase,
+      fill,e.color,e.elite||e.overdrive?4:2
+    );
+  }else if(e.shape==="diamond"){
+    polygon(
+      e.x,e.y,e.r,4,angle(e,P),
+      fill,e.color,e.elite||e.overdrive?4:2
+    );
+  }else if(e.shape==="hex"){
+    polygon(
+      e.x,e.y,e.r,6,e.phase,
+      fill,e.color,e.elite||e.overdrive?4:2
+    );
+  }else if(e.shape==="star"){
+    ctx.beginPath();
+
+    for(let i=0;i<10;i++){
+      const radius=i%2?e.r*.45:e.r;
+      const a=-Math.PI/2+i*Math.PI/5;
+      const px=e.x+Math.cos(a)*radius;
+      const py=e.y+Math.sin(a)*radius;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+
+    ctx.closePath();
+    ctx.fillStyle=fill;
+    ctx.fill();
+    ctx.strokeStyle=e.color;
+    ctx.lineWidth=e.elite||e.overdrive?4:2;
+    ctx.stroke();
+  }else if(e.shape==="ring"){
+    circle(e.x,e.y,e.r,fill,e.elite||e.overdrive?4:2);
+    circle(e.x,e.y,e.r*.45,e.color,2);
+  }else if(e.shape==="loom"){
+    // Weaver: a slowly spinning four-pointed shuttle, driven by its own
+    // age so it visibly turns as it drifts and drops its trail.
+    const rot=e.phase+e.age*2.2;
+    ctx.save();
+    ctx.translate(e.x,e.y);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    ctx.moveTo(0,-e.r);
+    ctx.lineTo(e.r*.28,0);
+    ctx.lineTo(0,e.r);
+    ctx.lineTo(-e.r*.28,0);
+    ctx.closePath();
+    ctx.moveTo(-e.r,0);
+    ctx.lineTo(0,e.r*.28);
+    ctx.lineTo(e.r,0);
+    ctx.lineTo(0,-e.r*.28);
+    ctx.closePath();
+    ctx.fillStyle=fill;
+    ctx.fill();
+    ctx.strokeStyle=e.color;
+    ctx.lineWidth=e.elite||e.overdrive?4:2;
+    ctx.stroke();
+    ctx.restore();
+  }else if(e.shape==="burst"){
+    // Cinderling: a spiky mine/urchin silhouette, denser and sharper
+    // than the star shape so it reads as "will detonate" at a glance.
+    ctx.beginPath();
+
+    for(let i=0;i<16;i++){
+      const radius=i%2?e.r*.35:e.r;
+      const a=i*Math.PI/8;
+      const px=e.x+Math.cos(a)*radius;
+      const py=e.y+Math.sin(a)*radius;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+
+    ctx.closePath();
+    ctx.fillStyle=fill;
+    ctx.fill();
+    ctx.strokeStyle=e.color;
+    ctx.lineWidth=e.elite||e.overdrive?4:2;
+    ctx.stroke();
+  }else if(e.shape==="octagon"){
+    polygon(
+      e.x,e.y,e.r,8,e.phase,
+      fill,e.color,e.elite||e.overdrive?4:2
+    );
+  }else{
+    circle(e.x,e.y,e.r,fill,e.elite||e.overdrive?4:2);
+  }
+
+  if(e.type==="charger"){
+    text("!",e.x,e.y,15,e.color,"center");
+  }
+
+  if(e.type==="sniper"){
+    line(
+      e.x,e.y,
+      e.x+Math.cos(angle(e,P))*25,
+      e.y+Math.sin(angle(e,P))*25,
+      e.color,
+      3
+    );
+  }
+
+  drawHealthShards(e);
+}
+
+function drawHealthShards(e){
+ const total=Math.max(3,Math.ceil(e.maxHp/45));
+ const current=Math.max(0,Math.ceil(e.hp/Math.max(1,e.maxHp)*total));
+ const gap=5;
+ const width=total*7+(total-1)*gap;
+ const start=e.x-width/2;
+
+ for(let i=0;i<total;i++){
+  const x=start+i*(7+gap);
+  const active=i<current;
+  polygon(
+   x+3.5,
+   e.y-e.r-14,
+   5,
+   4,
+   Math.PI/4,
+   active?e.color:"#263849",
+   active?C.white:"#263849",
+   .7
+  );
+ }
+}
+
+
+function drawPlayer(){
+  if(!P)return;
+
+  if(P.dash>0){
+    for(let i=4;i>0;i--){
+      ctx.globalAlpha=.08*(5-i);
+      drawArrow(
+        P.x-P.dx*i*18,
+        P.y-P.dy*i*18,
+        P.angle,
+        C.mint,
+        .8
+      );
+    }
+
+    ctx.globalAlpha=1;
+    circle(P.x,P.y,34,C.mint,2);
+  }
+
+  if(P.inv>0&&Math.floor(visual*18)%2===0){
+    ctx.globalAlpha=.45;
+  }
+
+  drawArrow(P.x,P.y,P.angle,C.mint,1);
+
+  ctx.globalAlpha=1;
+
+  if(P.energy>=S.pulseCost){
+    ctx.setLineDash([5,8]);
+    circle(P.x,P.y,31,C.gold,2);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawArrow(x,y,rotation,color,scale=1){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rotation);
+  ctx.scale(scale,scale);
+
+  ctx.beginPath();
+  ctx.moveTo(23,0);
+  ctx.lineTo(-13,-13);
+  ctx.lineTo(-7,0);
+  ctx.lineTo(-13,13);
+  ctx.closePath();
+
+  ctx.fillStyle="#122835";
+  ctx.fill();
+  ctx.strokeStyle=color;
+  ctx.lineWidth=2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(2,0,3.5,0,TAU);
+  ctx.fillStyle=C.white;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawPlayerShards(){
+  if(!R||!S)return;
+
+  const shardSize=9;
+  const gap=7;
+  const total=S.maxHp;
+  const width=total*shardSize+(total-1)*gap;
+  const start=600-width/2;
+
+  for(let i=0;i<total;i++){
+    const x=start+i*(shardSize+gap);
+    const active=i<R.hp;
+
+    polygon(
+      x+shardSize/2,
+      51,
+      shardSize*.72,
+      4,
+      Math.PI/4,
+      active?C.mint:"#263849",
+      active?C.white:"#263849",
+      .8
+    );
+  }
+}
+
+function drawHUD(){
+ ctx.fillStyle="#09111ef2";
+ ctx.fillRect(0,0,W,TOP);
+ ctx.fillRect(0,BOTTOM,W,H-BOTTOM);
+
+ text("VOID BLOOM / ECHOES",24,25,19,C.mint);
+
+ if(!R)return;
+
+ text(`${R.scrap} ${t("scrap_suffix")} · ${R.score} ${t("score_label")}`,24,55,12,C.gold);
+ text(`${t("level_label")} ${R.level}`,24,81,11,C.mint);
+ bar(90,78,220,5,R.xp/xpNeeded(),C.mint);
+
+ text(t("hud_integrity"),600,25,11,C.muted,"center");
+drawPlayerShards();
+ text(`${t("room_label")} ${R.depth+1} · ${t("kills_suffix")} ${R.kills}`,W-24,27,14,C.white,"right");
+
+ if(room){
+  const objective=room.type==="endless"
+   ?`${t("hud_endless")} ${room.kills}/${room.target}`
+   :room.type==="boss"
+   ?t("hud_guardian")
+   :`${t("hud_wave")} ${room.wave}/${room.maxWaves}`;
+
+  text(objective,W-24,55,11,C.pink,"right");
+ }
+
+ if(room&&room.type==="boss"){
+  const boss=enemies.find(e=>e.type==="boss");
+
+  if(boss){
+   text(boss.name,600,90,13,boss.color,"center");
+   bar(350,98,500,8,boss.hp/boss.maxHp,boss.color);
+  }
+ }
+
+ drawUpgradeBar();
+
+ if(P){
+  if(isTouch){
+   // The touch buttons show their own recharge state (a conic-gradient
+   // ring) instead of duplicating it in a separate canvas bar.
+   const dashReady=P.dashCD<=0;
+   const pulseReady=P.energy>=S.pulseCost;
+
+   btnDash.style.setProperty("--ready",dashReady?1:1-P.dashCD/S.dashCD);
+   btnDash.classList.toggle("ready",dashReady);
+   btnPulse.style.setProperty("--ready",Math.min(1,P.energy/S.pulseCost));
+   btnPulse.classList.toggle("ready",pulseReady);
+  }else{
+   text(`[SPACE] ${t("dash_short")}`,24,H-48,12,P.dashCD<=0?C.mint:C.muted);
+
+   bar(24,H-28,195,6,1-P.dashCD/S.dashCD,C.mint);
+
+   text(
+     P.dashCD<=0?t("hud_ready"):P.dashCD.toFixed(1)+"s",
+     230,
+     H-26,
+     10,
+     C.mint
+   );
+
+   text(`[E] ${t("pulse_short")}`,330,H-48,12,P.energy>=S.pulseCost?C.gold:C.muted);
+
+   bar(330,H-28,195,6,P.energy/S.pulseCost,C.gold);
+
+   text(
+     P.energy>=S.pulseCost
+       ?t("hud_ready")
+       :Math.floor(P.energy/S.pulseCost*100)+"%",
+     535,
+     H-26,
+     10,
+     C.gold
+   );
+  }
+ }
+}
+
+// A compact row of owned mutations/weapons and their current rank, along
+// the bottom HUD strip — a glance at your build without opening BUILD.
+function drawUpgradeBar(){
+ if(!R)return;
+
+ const owned=[
+  ...MUTATIONS.filter(m=>rank(m.id)>0).map(m=>({label:`${m.name.split(" ")[0]} ${rank(m.id)}`,color:C.mint})),
+  ...WEAPONS.filter(w=>weaponRank(w.id)>0).map(w=>({label:`${w.name.split(" ")[0]} ${weaponRank(w.id)}`,color:C.gold}))
+ ];
+
+ if(!owned.length)return;
+
+ ctx.font="600 11px monospace";
+
+ const gap=14,y=740,maxX=W-24;
+ let x=24,shown=0;
+
+ for(;shown<owned.length;shown++){
+  const w=ctx.measureText(owned[shown].label).width;
+  if(x+w>maxX-40)break;
+  text(owned[shown].label,x,y,11,owned[shown].color,"left");
+  x+=w+gap;
+ }
+
+ if(shown<owned.length){
+  text(`+${owned.length-shown}`,x,y,11,C.muted,"left");
+ }
+}
+
+function draw(){
+ ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+ drawBackground();
+
+ ctx.save();
+ ctx.beginPath();
+ ctx.rect(0,TOP,W,BOTTOM-TOP);
+ ctx.clip();
+
+ if(shakeEnabled&&shake>0)ctx.translate(random(-shake,shake),random(-shake,shake));
+
+ drawHazards();
+
+ for(const o of orbs)circle(o.x,o.y,4,C.mint);
+ drawMergeTelegraphs();
+ drawBombTelegraphs();
+ for(const e of enemies)drawEnemy(e);
+
+ for(const b of bullets){
+  if(!b.dead)circle(b.x,b.y,b.r,b.good?C.mint:C.gold);
+ }
+
+ drawPlayer();
+
+ for(const p of particles){
+  ctx.globalAlpha=p.life/p.max;
+  ctx.fillStyle=p.color;
+  ctx.fillRect(p.x,p.y,p.size,p.size);
+ }
+ ctx.globalAlpha=1;
+
+ for(const r of rings){
+  ctx.globalAlpha=r.life/r.max;
+  circle(r.x,r.y,r.r*(1-r.life/r.max),r.color,2);
+ }
+ ctx.globalAlpha=1;
+
+ for(const l of labels){
+  ctx.globalAlpha=Math.min(1,l.life*2);
+  text(l.text,l.x,l.y,l.max>2?25:13,l.color,"center");
+ }
+ ctx.globalAlpha=1;
+
+ for(const b of beams){
+  ctx.globalAlpha=b.life/b.max;
+  line(b.x1,b.y1,b.x2,b.y2,b.color,3);
+ }
+ ctx.globalAlpha=1;
+
+ drawWeapons();
+
+ ctx.restore();
+ drawHUD();
+
+ // A brief full-screen pane at the moment of death — covers the whole
+ // canvas (HUD bars included), not just the play field, then fades out
+ // over DEATH_FLASH_TIME so the death-echo label reads as emerging from
+ // behind it rather than just floating on the battlefield like any other
+ // label.
+ if(deathFlash>0){
+  ctx.globalAlpha=(deathFlash/DEATH_FLASH_TIME)*.85;
+  ctx.fillStyle=C.spectral;
+  ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=1;
+ }
+}
+
+function drawWeapons(){
+ if(!P)return;
+
+ const haloCount=weaponRank("halo");
+
+ for(let i=0;i<haloCount;i++){
+  const a=P.orbit+i*TAU/haloCount;
+  circle(P.x+Math.cos(a)*68,P.y+Math.sin(a)*68,9,C.violet,2);
+ }
+}
+
+function effects(dt){
+ shake=Math.max(0,shake-dt*25);
+ deathFlash=Math.max(0,deathFlash-dt);
+
+ for(const p of particles){
+  p.x+=p.vx*dt;
+  p.y+=p.vy*dt;
+  p.vx*=.96;
+  p.vy*=.96;
+  p.life-=dt;
+ }
+ particles=particles.filter(p=>p.life>0);
+
+ rings.forEach(r=>r.life-=dt);
+ rings=rings.filter(r=>r.life>0);
+
+ labels.forEach(l=>{
+  l.life-=dt;
+  l.y-=dt*18;
+ });
+ labels=labels.filter(l=>l.life>0);
+
+ beams.forEach(b=>b.life-=dt);
+ beams=beams.filter(b=>b.life>0);
+}
+
+function dash(){
+ if(state!=="playing"||!P||P.dashCD>0)return;
+
+ let x=+(keys.has("d")||keys.has("arrowright"))-
+  +(keys.has("a")||keys.has("arrowleft"));
+
+ let y=+(keys.has("s")||keys.has("arrowdown"))-
+  +(keys.has("w")||keys.has("arrowup"));
+
+ const n=Math.hypot(x,y)||1;
+
+ P.dx=x/n||P.dx;
+ P.dy=y/n||P.dy;
+ P.dash=.17;
+ P.dashCD=S.dashCD;
+ P.hits.clear();
+ wakeAudio();
+ sfx.dash();
+}
+
+function pulse(){
+ if(state!=="playing"||!P||P.energy<S.pulseCost)return;
+
+ P.energy=0;
+ wakeAudio();
+ sfx.pulse();
+
+ for(const b of bullets){
+  if(!b.good)b.dead=true;
+ }
+
+ for(const e of enemies){
+  if(!e.dead&&distance(e,P)<500){
+   damageEnemy(e,S.pulseDamage);
+  }
+ }
+
+ label(P.x,P.y-45,t("pulse_label"),C.gold,.8);
+}
+
+// pause() is the guarded entry point (only takes effect while actually
+// playing, so a stray P keypress or the pause button can't fire it twice).
+// renderPause() is the actual screen and is what the sound toggle below
+// calls to refresh itself — it used to call pause() again, but by the time
+// that runs state is already "menu" (show() set it), so the guard silently
+// swallowed the re-render: no new show() call, and invoke() had already
+// cleared actions[] before running this handler, so every button on the
+// still-displayed pause screen — including the ones the player could see —
+// stopped responding to clicks entirely. That's the "game lags/freezes
+// when I toggle sound from pause" report on both Android and desktop.
+function pause(){
+ if(state!=="playing")return;
+ sfx.pause();
+ renderPause();
+}
+
+function renderPause(){
+ show(t("take_root_title"),
+  t("take_root_sub"),
+  [],
+  [
+   {title:t("resume"),fn:hide},
+   // Returns to the pause screen, not straight back into gameplay — see
+   // the comment on build() for why this can't just fall through to its
+   // default (route()).
+   {title:t("build_btn"),secondary:true,fn:()=>build(renderPause)},
+   {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();renderPause();}},
+   {title:shakeEnabled?t("shake_on"):t("shake_off"),secondary:true,fn:()=>{toggleShake();renderPause();}},
+   {title:t("abandon"),secondary:true,fn:()=>finish(false)}
+  ]);
+}
+
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+
+ if(e.target instanceof HTMLInputElement)return;
+ if([" ","arrowup","arrowdown","arrowleft","arrowright"].includes(k))e.preventDefault();
+ if(e.repeat)return;
+
+ keys.add(k);
+
+ if(state==="playing"){
+  if(k===" ")dash();
+  if(k==="e")pulse();
+  if(k==="p"||k==="escape")pause();
+ }else if(state==="dying"){
+  // Let the death flash play out — no menu escape mid-echo.
+ }else if(/^[1-9]$/.test(k)){
+  invoke(Number(k)-1);
+ }else if(k==="escape"){
+  title();
+ }
+});
+
+addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));
+addEventListener("blur",()=>keys.clear());
+
+function frame(now){
+ const dt=Math.min((now-last)/1000,.05);
+ last=now;
+ visual+=dt;
+
+ if(state==="playing"){
+  accumulator+=dt;
+
+  let steps=0;
+  while(accumulator>=1/120&&steps<6&&state==="playing"){
+   update(1/120);
+   accumulator-=1/120;
+   steps++;
+  }
+
+  if(steps>=6)accumulator=0;
+ }
+
+ effects(dt);
+ draw();
+ requestAnimationFrame(frame);
+}
+
+title();
+maybeShowA2hsHint();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
