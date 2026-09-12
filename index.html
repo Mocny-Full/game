@@ -326,6 +326,11 @@ const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 
 const MASTER_VOLUME=.35;
 let muted=read("void-bloom-muted",false);
+let shakeEnabled=read("void-bloom-shake",true);
+function toggleShake(){
+ shakeEnabled=!shakeEnabled;
+ write("void-bloom-shake",shakeEnabled);
+}
 let lang=read("void-bloom-lang","en");
 function setLang(l){
  lang=l;
@@ -359,6 +364,7 @@ const UI={
  en:{
   new_expedition:"NEW EXPEDITION",the_garden:"THE GARDEN",how_to_play:"HOW TO PLAY",
   sound_on:"SOUND: ON",sound_off:"SOUND: OFF",
+  shake_on:"SHAKE: ON",shake_off:"SHAKE: OFF",
   title_sub:"The garden has learned to punish hesitation.<br><b>Dash and pulse are emergency tools, not permanent movement abilities.</b>",
   best_label:"BEST",victories_label:"VICTORIES",spores_label:"SPORES",
   touch_hint:"LEFT SIDE JOYSTICK MOVES · DASH / PULSE BUTTONS",
@@ -443,6 +449,7 @@ const UI={
  pl:{
   new_expedition:"NOWA WYPRAWA",the_garden:"OGRÓD",how_to_play:"JAK GRAĆ",
   sound_on:"DŹWIĘK: WŁ",sound_off:"DŹWIĘK: WYŁ",
+  shake_on:"WSTRZĄSY: WŁ",shake_off:"WSTRZĄSY: WYŁ",
   title_sub:"Ogród nie wybacza wahania.<br><b>Unik i puls to ostatnia deska ratunku — nie sposób na stałe poruszanie się.</b>",
   best_label:"REKORD",victories_label:"ZWYCIĘSTW",spores_label:"ZARODNIKÓW",
   touch_hint:"STEROWANIE Z LEWEJ · PRZYCISKI UNIKU I PULSU",
@@ -1113,6 +1120,7 @@ function title(){
    {title:t("the_garden"),secondary:true,fn:garden},
    {title:t("how_to_play"),secondary:true,fn:help},
    {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();title();}},
+   {title:shakeEnabled?t("shake_on"):t("shake_off"),secondary:true,fn:()=>{toggleShake();title();}},
    {title:lang==="en"?"● EN":"EN",secondary:true,disabled:lang==="en",fn:()=>{setLang("en");title();}},
    {title:lang==="pl"?"● PL":"PL",secondary:true,disabled:lang==="pl",fn:()=>{setLang("pl");title();}}
   ],
@@ -3698,7 +3706,7 @@ function draw(){
  ctx.rect(0,TOP,W,BOTTOM-TOP);
  ctx.clip();
 
- if(shake>0)ctx.translate(random(-shake,shake),random(-shake,shake));
+ if(shakeEnabled&&shake>0)ctx.translate(random(-shake,shake),random(-shake,shake));
 
  drawHazards();
 
@@ -3860,6 +3868,7 @@ function renderPause(){
    // default (route()).
    {title:t("build_btn"),secondary:true,fn:()=>build(renderPause)},
    {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();renderPause();}},
+   {title:shakeEnabled?t("shake_on"):t("shake_off"),secondary:true,fn:()=>{toggleShake();renderPause();}},
    {title:t("abandon"),secondary:true,fn:()=>finish(false)}
   ]);
 }
