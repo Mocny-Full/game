@@ -416,6 +416,11 @@ const UI={
   reroll_foot:(n)=>`${n} REROLLS HELD`,
   sold_out_title:"SOLD OUT",sold_out_desc:"Every mutation has already reached maximum rank.",
   new_suffix:"NEW",
+  workshop_title:"WORKSHOP",workshop_tag:"ONE-TIME",
+  workshop_desc:"A single permanent upgrade, at a steep price. Only available to those who take no mutations.",
+  workshop_sub:"One purchase per workshop. Choose carefully — the offer won't change once you've seen it.",
+  workshop_closed_title:"WORKSHOP CLOSED",workshop_closed_desc:"You already spent this workshop's one upgrade. There's nothing left to buy here.",
+  workshop_maxed_desc:"Every workshop upgrade has already reached maximum rank.",
   weathered_note_title:"WEATHERED NOTE",weathered_note_desc:"Someone left this behind. Reading it won't help you fight.",
   note_reveal_title:"A WEATHERED <span>NOTE</span>",
   level_up_title:"LEVEL UP — CHOOSE A <span>MUTATION</span>",
@@ -501,6 +506,11 @@ const UI={
   reroll_foot:(n)=>`PRZERZUTÓW: ${n}`,
   sold_out_title:"WYPRZEDANE",sold_out_desc:"Każda mutacja osiągnęła już maksymalną rangę.",
   new_suffix:"NOWOŚĆ",
+  workshop_title:"WARSZTAT",workshop_tag:"JEDNORAZOWO",
+  workshop_desc:"Jedno trwałe ulepszenie za wysoką cenę. Dostępne tylko dla tych, którzy nie biorą mutacji.",
+  workshop_sub:"Jeden zakup na warsztat. Wybieraj rozważnie — oferta się nie zmieni.",
+  workshop_closed_title:"WARSZTAT ZAMKNIĘTY",workshop_closed_desc:"Jedyne ulepszenie tego warsztatu zostało już wykorzystane. Nie ma tu już nic do kupienia.",
+  workshop_maxed_desc:"Każde ulepszenie warsztatu osiągnęło już maksymalną rangę.",
   weathered_note_title:"ZWIETRZAŁA NOTATKA",weathered_note_desc:"Ktoś to tu zostawił. W walce ci to nie pomoże.",
   note_reveal_title:"ZWIETRZAŁA <span>NOTATKA</span>",
   level_up_title:"NOWY POZIOM — WYBIERZ <span>MUTACJĘ</span>",
@@ -865,6 +875,23 @@ const WEAPONS=[
 ].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],tag:x[4],lore:x[5],
  desc_pl:x[6],lore_pl:x[7]}));
 
+// The Workshop is a separate, run-only upgrade track for players who
+// refuse every mutation offer (mutationChoice's REFUSE button is the only
+// way to keep R.mutationPicks at 0 — see route() for where the Workshop
+// card only appears under that condition). It never touches rank()/
+// R.mods, so buying here never counts as "taking a mutation" and never
+// disqualifies the player from further Workshop visits.
+const WORKSHOP_UPGRADES=[
+ ["dmg","Focused Lens",3,"+15% weapon damage per rank.",
+  "+15% obrażeń broni na rangę."],
+ ["speed","Overclocked Servos",3,"+8% movement speed per rank.",
+  "+8% prędkości ruchu na rangę."],
+ ["hp","Reinforced Plating",3,"+2 maximum HP per rank.",
+  "+2 do maksymalnego HP na rangę."],
+ ["dash","Tempered Coils",3,"Dash cooldown reduced by 8% per rank.",
+  "Odnowienie uniku skrócone o 8% na rangę."]
+].map(x=>({id:x[0],name:x[1],max:x[2],desc:x[3],desc_pl:x[4]}));
+
 // Notes are physical scraps of memory belonging to the garden's other
 // inhabitants — sometimes the player's own life before arriving, sometimes
 // an earlier attempt at leaving, sometimes someone else's entirely. Older
@@ -1020,6 +1047,7 @@ function bossDepthAhead(){
 function rank(id){return R?.mods?.[id]||0}
 function weaponRank(id){return R?.weapons?.[id]||0}
 function metaRank(id){return meta.upgrades[id]||0}
+function workshopRank(id){return R?.workshop?.[id]||0}
 function xpNeeded(){return Math.floor(48+R.level*30+Math.pow(R.level,1.35)*5)}
 function heal(n){R.hp=Math.min(S.maxHp,R.hp+n)}
 
@@ -1027,13 +1055,17 @@ function calculate(){
  const f=FRAMES.find(x=>x.id===R.frame)||FRAMES[0];
 
  S={
-  maxHp:f.hp+rank("armor")+metaRank("vitality"),
-  speed:f.speed*(1+.12*rank("speed")),
-  damage:f.damage*Math.pow(1.24,rank("power")),
+  // workshopRank folds in stat boosts bought at the boss-floor Workshop
+  // (see WORKSHOP_UPGRADES) — a separate, run-only track only available
+  // to players who never take a mutation, so it never touches rank()/
+  // R.mods and never counts toward R.mutationPicks.
+  maxHp:f.hp+rank("armor")+metaRank("vitality")+workshopRank("hp")*2,
+  speed:f.speed*(1+.12*rank("speed"))*(1+.08*workshopRank("speed")),
+  damage:f.damage*Math.pow(1.24,rank("power"))*(1+.15*workshopRank("dmg")),
   rate:f.rate/Math.pow(1.16,rank("rate")),
   shots:f.shots+rank("spread"),
   pierce:rank("pierce"),
-  dashCD:f.dash*Math.pow(.9,rank("dash")),
+  dashCD:f.dash*Math.pow(.9,rank("dash"))*Math.pow(.92,workshopRank("dash")),
   dashDamage:70+30*rank("dash"),
 
   // pulseCost is the energy meter's fill target, not a resource spent
@@ -1193,7 +1225,13 @@ function begin(frame){
   rerolls:2+metaRank("memory"),
   lastReflectionDepth:-99,
   mutationPicks:0,
-  firstCombatDone:false
+  firstCombatDone:false,
+  // Workshop state: workshop holds bought ranks (mirrors mods but is
+  // never touched by mutationChoice), workshopStock/workshopStockDepth
+  // pin the current boss floor's single random offer so leaving and
+  // re-entering doesn't re-roll it, and workshopUsedAtDepth records once
+  // that floor's one purchase has been made.
+  workshop:{},workshopStock:null,workshopStockDepth:null,workshopUsedAtDepth:null
  };
 
  // A new expedition always starts at depth 0 — without this, a shop the
@@ -1274,6 +1312,12 @@ function route(){
    {title:t("boss_title"),tag:t("guardian_tag"),desc:t("boss_desc")(boss.name),fn:()=>enter("boss")},
    {title:t("shop_title"),tag:`${R.scrap} ${t("scrap_suffix")}`,desc:t("shop_desc"),fn:shop}
   ];
+  // The Workshop is a mutation-free-run perk: taking a mutation at any
+  // point — before ever visiting one, or after using one — permanently
+  // removes it from the floor map for the rest of the expedition.
+  if(R.mutationPicks===0){
+   cards.push({title:t("workshop_title"),tag:t("workshop_tag"),desc:t("workshop_desc"),fn:workshop});
+  }
  }else{
   if(R.mapAct!==Math.floor(R.depth/7))generateActMap();
 
@@ -1554,6 +1598,66 @@ function shop(){
 
  show(t("supply_cache_title"),
   t("supply_cache_sub"),
+  cards,
+  [{title:t("leave"),secondary:true,fn:route}],
+  `<div class="small">${R.scrap} ${t("scrap_suffix")}</div>`);
+}
+
+function workshop(){
+ // Already spent this boss floor's one purchase — show a closed state
+ // instead of another offer. This check comes before the stock check
+ // below so a used workshop never rerolls into a fresh-looking offer.
+ if(R.workshopUsedAtDepth===R.depth){
+  show(t("workshop_closed_title"),
+   t("workshop_closed_desc"),
+   [],
+   [{title:t("leave"),secondary:true,fn:route}]);
+  return;
+ }
+
+ // Pin one random not-yet-maxed upgrade to this depth, same exploit-safe
+ // pattern as shop()'s shopStock/shopStockDepth — leaving via LEAVE and
+ // walking back in must not reroll the offer.
+ if(R.workshopStock===null||R.workshopStockDepth!==R.depth){
+  const pool=WORKSHOP_UPGRADES.filter(x=>workshopRank(x.id)<x.max);
+  R.workshopStock=pool.length?choose(pool).id:null;
+  R.workshopStockDepth=R.depth;
+ }
+
+ const up=R.workshopStock?WORKSHOP_UPGRADES.find(u=>u.id===R.workshopStock):null;
+
+ if(!up){
+  show(t("workshop_title"),
+   t("workshop_maxed_desc"),
+   [],
+   [{title:t("leave"),secondary:true,fn:route}]);
+  return;
+ }
+
+ const curRank=workshopRank(up.id);
+ // Deliberately steep — this is meant to cost roughly what several rooms'
+ // worth of scrap income would earn, since it's the only progression a
+ // no-mutation run gets besides its starting frame and weapons.
+ const cost=500+curRank*300;
+
+ const cards=[{
+  title:up.name,
+  tag:`${cost} ${t("scrap_suffix")}`,
+  desc:localize(up).desc,
+  foot:`${t("rank_label")} ${curRank+1}/${up.max}`,
+  disabled:R.scrap<cost,
+  fn:()=>{
+   R.scrap-=cost;
+   R.workshop[up.id]=curRank+1;
+   R.workshopUsedAtDepth=R.depth;
+   calculate();
+   sfx.purchase();
+   workshop();
+  }
+ }];
+
+ show(t("workshop_title"),
+  t("workshop_sub"),
   cards,
   [{title:t("leave"),secondary:true,fn:route}],
   `<div class="small">${R.scrap} ${t("scrap_suffix")}</div>`);
