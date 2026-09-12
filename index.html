@@ -689,7 +689,7 @@ meta.upgrades=meta.upgrades||{};
 let state="title",actions=[];
 let last=performance.now(),accumulator=0,visual=0,shake=0,deathFlash=0;
 const DEATH_FLASH_TIME=.4;
-let shopStock=null;
+let shopStock=null,shopStockDepth=null;
 
 let R=null,S=null,P=null,room=null;
 let enemies=[],bullets=[],orbs=[],hazards=[],particles=[],rings=[],labels=[],beams=[];
@@ -1177,6 +1177,12 @@ function begin(frame){
   mutationPicks:0,
   firstCombatDone:false
  };
+
+ // A new expedition always starts at depth 0 — without this, a shop the
+ // previous run visited at depth 0 would look "current" to shop()'s
+ // depth check below and hand its leftover stock to this brand-new run.
+ shopStock=null;
+ shopStockDepth=null;
  calculate();
  R.hp=S.maxHp;
 
@@ -1232,7 +1238,13 @@ function pathMapHTML(){
 
 function route(){
  room=null;P=null;enemies=[];bullets=[];orbs=[];hazards=[];
- shopStock=null;
+ // shopStock deliberately isn't reset here — route() also runs whenever
+ // the player merely backs out of the shop's own screen (its LEAVE
+ // button) without the room actually changing. Clearing it unconditionally
+ // meant leaving and re-entering the same shop re-rolled its entire stock
+ // for free, letting a player farm it for whatever they wanted with no
+ // cost. shop() below only regenerates when shopStockDepth no longer
+ // matches the current room, i.e. an actual new shop.
 
  const biome=BIOMES[Math.min(3,Math.floor(R.depth/7))];
  const boss=bossDepthAhead()?BOSSES[Math.floor(R.depth/7)]:null;
@@ -1373,14 +1385,21 @@ function startCombat(){
  hide();
 }
 
-function build(){
+// back defaults to route() since that's the screen this is normally
+// opened from (the floor map's BUILD button). The pause menu also has
+// its own BUILD button (mid-combat), which passes renderPause here
+// instead — otherwise BACK fell through to the default and called
+// route(), which resets room/P/enemies for a fresh floor visit. From
+// inside a live fight that silently abandoned the current room and
+// dumped the player back at the floor map, mid-combat, without warning.
+function build(back=route){
  const mods=MUTATIONS.filter(x=>rank(x.id));
  const owned=WEAPONS.filter(x=>weaponRank(x.id));
 
  show(t("your_build_title"),
   `${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("damage_label")} ${S.damage.toFixed(1)} · ${t("dash_short")} ${S.dashCD.toFixed(2)}s · ${t("pulse_short")} ${S.pulseCost.toFixed(0)} ${t("energy_label")}`,
   [],
-  [{title:t("back"),fn:route}],
+  [{title:t("back"),fn:back}],
   `<div>${owned.map(x=>`<span class="badge">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":t("no_mutations"))}</div>`);
 }
 
@@ -1390,7 +1409,10 @@ function pickNote(){
 }
 
 function shop(){
- if(!shopStock){
+ // Only regenerate stock for an actual new shop (a different room depth)
+ // — not every time this screen is opened, or leaving via LEAVE and
+ // walking straight back in would re-roll it for free.
+ if(!shopStock||shopStockDepth!==R.depth){
   const mpool=MUTATIONS.filter(x=>rank(x.id)<x.max);
   const wpool=WEAPONS.filter(x=>weaponRank(x.id)<x.max);
 
@@ -1401,6 +1423,7 @@ function shop(){
    weapon:(wpool.length&&Math.random()<.45)?choose(wpool).id:null,
    note:Math.random()<.4?pickNote():null
   };
+  shopStockDepth=R.depth;
  }
 
  // Priced against a normal combat room's ~55-60 scrap so one room's income
@@ -3799,7 +3822,10 @@ function renderPause(){
   [],
   [
    {title:t("resume"),fn:hide},
-   {title:t("build_btn"),secondary:true,fn:build},
+   // Returns to the pause screen, not straight back into gameplay — see
+   // the comment on build() for why this can't just fall through to its
+   // default (route()).
+   {title:t("build_btn"),secondary:true,fn:()=>build(renderPause)},
    {title:muted?t("sound_off"):t("sound_on"),secondary:true,fn:()=>{toggleMute();renderPause();}},
    {title:t("abandon"),secondary:true,fn:()=>finish(false)}
   ]);
