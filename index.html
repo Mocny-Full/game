@@ -93,6 +93,13 @@ h1 span{color:var(--mint)}
 .card p{margin:0;color:#acbdce;font-size:13px;line-height:1.5}
 .card p.lore{margin-top:9px;font-style:italic;opacity:.72}
 .card small{display:block;color:var(--gold);margin-top:13px;font-size:11px}
+/* Weapons are the player's own reclaimed gear, never a mutation the
+   garden hands over — a gold accent (matching the HUD's existing
+   mutation-vs-weapon color split) sets a weapon's shop card apart from
+   the mint-accented mutation/event cards around it. */
+.card.weapon{border-color:#5a441c}
+.card.weapon em{color:var(--gold)}
+.card.weapon:hover{border-color:var(--gold)}
 .buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px}
 .button{padding:12px 21px;border:1px solid var(--mint);background:var(--mint);color:#08251e;font:800 12px monospace}
 .button.secondary{background:#12242b;color:var(--mint);border-color:#35594f}
@@ -101,7 +108,10 @@ button:focus-visible{outline:2px solid white;outline-offset:3px}
 .stats{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;margin:22px 0}
 .stats b{display:block;color:var(--mint);font:700 25px monospace}
 .stats small{color:var(--muted);font-size:10px}
-.badge{display:inline-block;padding:5px 9px;margin:3px;background:#243727;color:var(--gold);font:11px monospace}
+.badge{display:inline-block;padding:5px 9px;margin:3px;background:#243727;color:var(--mint);font:11px monospace}
+/* Same weapon-vs-mutation split as .card.weapon above, applied to the
+   BUILD screen's owned-gear badges. */
+.badge.weapon{background:#2a2013;color:var(--gold)}
 .pathmap{display:flex;justify-content:center;align-items:center;gap:5px;flex-wrap:wrap;margin:18px 0 -4px}
 .pn{display:flex;gap:2px;padding:3px;border:1px solid #223140;border-radius:4px;background:#0c1422a0}
 .pn.now{border-color:var(--mint)}
@@ -1041,7 +1051,7 @@ function show(title,sub,cards=[],buttons=[],extra=""){
 
  const cardHTML=cards.map((a,i)=>{
   if(!a.disabled)actions[i]=a.fn;
-  return `<button type="button" class="card" data-action="${i}" ${a.disabled?"disabled":""}>
+  return `<button type="button" class="card${a.cardClass?" "+esc(a.cardClass):""}" data-action="${i}" ${a.disabled?"disabled":""}>
    <em>${i+1} / ${esc(a.tag||t("choice_fallback"))}</em>
    <h3>${esc(a.title)}</h3>
    <p>${esc(a.desc||"")}</p>
@@ -1400,7 +1410,7 @@ function build(back=route){
   `${t("level_label")} ${R.level} · HP ${R.hp}/${S.maxHp} · ${t("damage_label")} ${S.damage.toFixed(1)} · ${t("dash_short")} ${S.dashCD.toFixed(2)}s · ${t("pulse_short")} ${S.pulseCost.toFixed(0)} ${t("energy_label")}`,
   [],
   [{title:t("back"),fn:back}],
-  `<div>${owned.map(x=>`<span class="badge">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":t("no_mutations"))}</div>`);
+  `<div>${owned.map(x=>`<span class="badge weapon">${x.name} ${weaponRank(x.id)}/${x.max}</span>`).join("")}${mods.map(x=>`<span class="badge">${x.name} ${rank(x.id)}/${x.max}</span>`).join("")||(owned.length?"":t("no_mutations"))}</div>`);
 }
 
 function pickNote(){
@@ -1495,6 +1505,7 @@ function shop(){
  if(wep){
   cards.push({
    title:wep.name,
+   cardClass:"weapon",
    tag:wepRank===0?`${wepCost} ${t("scrap_suffix")} · ${t("new_suffix")}`:`${wepCost} ${t("scrap_suffix")}`,
    desc:localize(wep).desc,
    lore:localize(wep).lore,
