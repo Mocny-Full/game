@@ -3224,6 +3224,28 @@ function drawHazards(){
 
       ctx.restore();
     }
+
+    if(h.type==="damage"){
+      // The Afterimage mutation's dash-trail blooms — fully functional
+      // (see the damage tick in updatePlayer) but previously had no
+      // draw case at all here, so they dealt damage with zero on-screen
+      // feedback. A small cluster of fading, slowly turning petals marks
+      // where a bloom actually is.
+      const fade=1-clamp(h.age/h.duration,0,1);
+      const petals=5;
+
+      ctx.save();
+      ctx.globalAlpha=.55*fade;
+
+      for(let i=0;i<petals;i++){
+        const a=i*TAU/petals+h.age*1.5;
+        circle(h.x+Math.cos(a)*h.r*.45,h.y+Math.sin(a)*h.r*.45,h.r*.32,C.mint);
+      }
+
+      ctx.globalAlpha=.85*fade;
+      circle(h.x,h.y,h.r*.22,C.mint);
+      ctx.restore();
+    }
   }
 
   ctx.globalAlpha=1;
