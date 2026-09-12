@@ -1190,16 +1190,30 @@ function garden(){
   `<div class="small">${t("spores_footer")} ${meta.spores}</div>`);
 }
 
+// The tutorial cards' own text gets 2-line-clamped on short/coarse
+// viewports (see the max-height:520px media query), which used to just
+// cut descriptions off with no way to read the rest — the cards had no
+// fn at all, so tapping one did nothing. Now tapping opens the same text
+// full-size in the .sub area, which is never clamped, with a BACK button
+// straight back to this list.
+function helpDetail(item){
+ show(item.title,
+  `${item.desc}${item.foot?`<br><br><span style="color:var(--gold)">${item.foot}</span>`:""}`,
+  [],
+  [{title:t("back"),fn:help}]);
+}
+
 function help(){
+ const items=[
+  {title:t("dash_title"),tag:isTouch?t("dash_tag_touch"):t("dash_tag_key"),desc:t("dash_desc"),foot:t("dash_foot")},
+  {title:t("pulse_title"),tag:isTouch?t("dash_tag_touch"):t("pulse_tag_key"),desc:t("pulse_desc"),foot:t("pulse_foot")},
+  {title:t("enemies_title"),tag:t("enemies_tag"),desc:t("enemies_desc"),foot:t("enemies_foot")},
+  {title:t("pathmap_title"),tag:t("pathmap_tag"),desc:t("pathmap_desc"),foot:t("pathmap_foot")},
+  {title:t("reflection_title"),tag:t("reflection_tag"),desc:t("reflection_desc"),foot:t("reflection_foot")}
+ ];
  show(t("danger_title"),
   t("danger_sub"),
-  [
-   {title:t("dash_title"),tag:isTouch?t("dash_tag_touch"):t("dash_tag_key"),desc:t("dash_desc"),foot:t("dash_foot")},
-   {title:t("pulse_title"),tag:isTouch?t("dash_tag_touch"):t("pulse_tag_key"),desc:t("pulse_desc"),foot:t("pulse_foot")},
-   {title:t("enemies_title"),tag:t("enemies_tag"),desc:t("enemies_desc"),foot:t("enemies_foot")},
-   {title:t("pathmap_title"),tag:t("pathmap_tag"),desc:t("pathmap_desc"),foot:t("pathmap_foot")},
-   {title:t("reflection_title"),tag:t("reflection_tag"),desc:t("reflection_desc"),foot:t("reflection_foot")}
-  ],
+  items.map(c=>({...c,fn:()=>helpDetail(c)})),
   [{title:t("back"),fn:title}]);
 }
 
