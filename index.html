@@ -443,6 +443,7 @@ const UI={
   kills_suffix:"KILLS",
   final_boss_intro:"IT HAS SEEN ENOUGH",
   enraged_label:"ENRAGED",
+  frenzy_label:"THE GARDEN TURNS FERAL",
   reflection_spawn_label:"A REFLECTION STIRS",
   brood_mother_label:"BROOD MOTHER",overdrive_label:"OVERDRIVE",
   pulse_label:"PULSE",
@@ -533,6 +534,7 @@ const UI={
   kills_suffix:"ZABÓJSTW",
   final_boss_intro:"MA JUŻ DOŚĆ",
   enraged_label:"WŚCIEKŁY",
+  frenzy_label:"OGRÓD DZICZEJE",
   reflection_spawn_label:"ODBICIE NADCIĄGA",
   brood_mother_label:"MATKA ROJU",overdrive_label:"PRZECIĄŻENIE",
   pulse_label:"PULS",
@@ -1439,7 +1441,8 @@ function enter(type){
   target:endless?100+Math.floor((R.depth-27)*30):0,
   clear:0,
   bossSpawned:false,
-  hazardTimer:4
+  hazardTimer:4,
+  wasFrenzied:false
  };
 
  startCombat();
@@ -2581,7 +2584,7 @@ function explodeTank(e){
  const blastR=e.r+60;
 
  if(distance(e,P)<blastR+P.r){
-  hurt(e.overdrive?4:2);
+  hurt((e.overdrive?4:2)*(frenzyActive()?FRENZY_DMG_MULT:1));
  }
 
  for(const o of enemies){
@@ -2619,6 +2622,31 @@ function updateEnemy(e,dt){
  e.slow=Math.max(0,e.slow-dt);
  e.orbitHit=Math.max(0,e.orbitHit-dt);
  e.hit=Math.max(0,e.hit-dt);
+
+ const frenzied=frenzyActive();
+
+ if(frenzied){
+  // Burns through its own HP at a fixed % of max/sec — a hard clock that
+  // finishes off whatever's already worn down from the fight instead of
+  // letting stragglers get kited forever, while still giving a fresh
+  // arrival a real ~20s window to close in and hit back.
+  damageEnemy(e,e.maxHp*FRENZY_BURN_RATE*dt);
+  if(e.dead)return;
+
+  e.emberTimer=(e.emberTimer||0)-dt;
+  if(e.emberTimer<=0){
+   e.emberTimer=.07;
+   particles.push({
+    x:e.x+random(-e.r*.5,e.r*.5),
+    y:e.y+random(-e.r*.5,e.r*.5),
+    vx:random(-18,18),
+    vy:random(-75,-35),
+    life:.35,max:.35,
+    color:C.gold,
+    size:random(1,3)
+   });
+  }
+ }
 
  // A tier-2 "mother" keeps spawning fresh, unmerged chaff of its own type
  // at a fast clip — they carry no reward (see damageEnemy's noReward
@@ -2707,7 +2735,7 @@ function updateEnemy(e,dt){
  // even a merged seeker (let alone a mite) outran Bastion — the game's
  // slowest frame — from as early as depth 8, making overdrive enemies
  // flatly unescapable rather than just more dangerous for most of a run.
- const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:1.5):1);
+ const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:1.5):1)*(frenzied?FRENZY_SPEED_MULT:1);
 
  if(e.type==="charger"){
   if(e.charge>0){
@@ -2736,7 +2764,10 @@ function updateEnemy(e,dt){
   // than get into a fight itself.
   const ranged=["gunner","sniper","summoner","warden"].includes(e.type);
   const preferred=e.type==="sniper"?450:290;
-  const movement=ranged?(n<preferred-65?-.75:n>preferred+45?1:0):1;
+  // Frenzy overrides the ranged types' usual measured kiting — they close
+  // in like everything else instead of sitting safely at range, since the
+  // whole point is trading their normal patient approach for a rush.
+  const movement=frenzied?1:ranged?(n<preferred-65?-.75:n>preferred+45?1:0):1;
 
   e.x+=Math.cos(a)*speed*movement*dt;
   e.y+=Math.sin(a)*speed*movement*dt;
@@ -2753,12 +2784,12 @@ function updateEnemy(e,dt){
     if(e.tell<=0){
      if(e.type==="gunner"){
       for(let i=-1;i<=1;i++){
-       bullet(e.x,e.y,a+i*.17,265,false,1,null,e.overdrive?2:1);
+       bullet(e.x,e.y,a+i*.17,265,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
       }
      }
 
      if(e.type==="sniper"){
-      bullet(e.x,e.y,a,620,false,1,null,e.overdrive?2:1);
+      bullet(e.x,e.y,a,620,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
      }
 
      if(e.type==="summoner"){
@@ -2792,10 +2823,10 @@ function updateEnemy(e,dt){
    // A suicide rusher: reaching the player detonates it immediately
    // (the same on-death fire patch as dying to gunfire) instead of just
    // sitting there chipping away at contact like every other enemy.
-   hurt(e.overdrive?2:1);
+   hurt((e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
    damageEnemy(e,e.hp);
   }else{
-   hurt(e.overdrive?2:1);
+   hurt((e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
   }
  }
 }
@@ -2856,6 +2887,26 @@ function pointSegment(px,py,x1,y1,x2,y2){
  return Math.hypot(px-x1-dx*t,py-y1-dy*t);
 }
 
+// A mutation-free player's damage barely scales (workshop upgrades are a
+// small flat % — see calculate()), while enemies keep merging into ever
+// bulkier overdrive/mother bodies. The result playtesting surfaced: once
+// a wave's spawn phase ends, the survivors clump up trying to fuse and
+// the fight stalls into slowly circling a blob that outdamages what a
+// no-mutation build can return, with pulse as the only real answer.
+// Frenzy is the garden's alternative to that stalemate on exactly these
+// runs: since this player never let the garden into their build, past
+// the first guardian it stops being patient with them. The moment a
+// wave stops producing new arrivals, whatever's still alive abandons the
+// slow group-and-fuse approach for a berserk, individually short-lived
+// rush — faster, harder-hitting, and burning its own HP away, so the
+// fight resolves in one direction or the other instead of dragging.
+const FRENZY_SPEED_MULT=1.5;
+const FRENZY_DMG_MULT=1.5;
+const FRENZY_BURN_RATE=.05; // fraction of max HP burned per second
+function frenzyActive(){
+ return !!(R&&room&&R.mutationPicks===0&&R.depth>=7&&room.type!=="boss"&&room.wave>0&&!room.pending.length);
+}
+
 const MELTABLE=["seeker","gunner","charger","tank","sniper","summoner","mite","weaver","cinderling","warden"];
 const MERGE_TIME=5;
 
@@ -2873,6 +2924,13 @@ const MERGE_TIME=5;
 // mother. Without this, mother -> children -> merge -> merge -> new
 // mother is an unbounded spawn chain.
 function updateMerging(dt){
+ // Frenzied enemies rush independently instead of pairing up to fuse —
+ // see frenzyActive() above. Existing merge timers simply freeze rather
+ // than reset, so if frenzy ever ends mid-room (a new wave refills
+ // room.pending) any pair that was already close picks up where it left
+ // off instead of losing progress.
+ if(frenzyActive())return;
+
  for(const e of enemies){
   if(e.dead||e.born>0||e.mother||!MELTABLE.includes(e.type)||(e.overdrive&&e.noReward))continue;
 
@@ -2939,6 +2997,8 @@ function mergeEnemies(e,partner){
 // ring once they're past the halfway point — so a merge is something the
 // player can see coming and react to, not a surprise.
 function drawMergeTelegraphs(){
+ if(frenzyActive())return;
+
  for(const e of enemies){
   if(e.dead||!e.mergeWith||e.mergeWith.dead||!e.mergeTimer)continue;
 
@@ -3012,6 +3072,17 @@ function update(dt){
    room.hazardTimer=2.5;
   }
  }
+
+ // Announce the moment frenzy actually kicks in for this wave — otherwise
+ // "enemies suddenly got faster and started glowing" reads as a bug, not
+ // a mechanic. Re-announced every wave it recurs (room.wasFrenzied resets
+ // whenever room.pending refills), same as the boss enrage stages do.
+ const nowFrenzied=frenzyActive();
+ if(nowFrenzied&&!room.wasFrenzied){
+  label(600,155,t("frenzy_label"),C.gold,1.5);
+  sfx.bossEnrage();
+ }
+ room.wasFrenzied=nowFrenzied;
 
  if(room.type==="endless"){
   room.wait-=dt;
@@ -3506,6 +3577,16 @@ function drawEnemy(e){
     ctx.restore();
   }
 
+  if(frenzyActive()){
+    // A faster, jittery flicker than the overdrive ring's steady pulse —
+    // reads as agitated/burning rather than electrified. The ember
+    // particles emitted from updateEnemy do the rest of the "on fire" cue.
+    ctx.save();
+    ctx.globalAlpha=.55+Math.sin(e.age*16)*.3;
+    circle(e.x,e.y,e.r+6+Math.sin(e.age*22)*2,C.gold,3);
+    ctx.restore();
+  }
+
   const fill=e.hit>0?C.white:"#132330";
 
   if(e.shape==="triangle"){
@@ -3706,8 +3787,8 @@ function drawArrow(x,y,rotation,color,scale=1){
 function drawPlayerShards(){
   if(!R||!S)return;
 
-  const shardSize=9;
-  const gap=7;
+  const shardSize=18;
+  const gap=14;
   const total=S.maxHp;
   const width=total*shardSize+(total-1)*gap;
   const start=600-width/2;
