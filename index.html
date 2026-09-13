@@ -182,7 +182,7 @@ const W=1200,H=800,TOP=100,BOTTOM=724,TAU=Math.PI*2;
 const C={
  mint:"#71ffd0",gold:"#ffcf78",pink:"#ff7197",blue:"#79ceff",
  violet:"#bda2ff",white:"#e8f4ff",muted:"#96aabd",bg:"#080e18",
- spectral:"#d9e4ff"
+ spectral:"#d9e4ff",red:"#ff4d3d"
 };
 
 const canvas=document.querySelector("#game");
@@ -443,7 +443,6 @@ const UI={
   kills_suffix:"KILLS",
   final_boss_intro:"IT HAS SEEN ENOUGH",
   enraged_label:"ENRAGED",
-  frenzy_label:"THE GARDEN TURNS FERAL",
   reflection_spawn_label:"A REFLECTION STIRS",
   brood_mother_label:"BROOD MOTHER",overdrive_label:"OVERDRIVE",
   pulse_label:"PULSE",
@@ -534,7 +533,6 @@ const UI={
   kills_suffix:"ZABÓJSTW",
   final_boss_intro:"MA JUŻ DOŚĆ",
   enraged_label:"WŚCIEKŁY",
-  frenzy_label:"OGRÓD DZICZEJE",
   reflection_spawn_label:"ODBICIE NADCIĄGA",
   brood_mother_label:"MATKA ROJU",overdrive_label:"PRZECIĄŻENIE",
   pulse_label:"PULS",
@@ -1441,8 +1439,7 @@ function enter(type){
   target:endless?100+Math.floor((R.depth-27)*30):0,
   clear:0,
   bossSpawned:false,
-  hazardTimer:4,
-  wasFrenzied:false
+  hazardTimer:4
  };
 
  startCombat();
@@ -1777,7 +1774,13 @@ function spawn(type,x,y,elite=false){
   born:.7,dead:false,id:Math.random(),
   tell:0,aim:0,fire:random(.5,1.8),charge:0,
   phase:random(0,TAU),age:0,slow:0,burn:0,
-  orbitHit:0,hit:0
+  orbitHit:0,hit:0,
+  // A fixed per-enemy bearing bias applied to its approach (see
+  // updateEnemy's moveAngle) — without it every enemy beelines the exact
+  // same line to the player and the whole wave stacks into one lane
+  // behind/around them instead of spreading out. Weapon aim still always
+  // uses the true angle, so this only ever changes footwork, not accuracy.
+  flankOffset:random(-.55,.55)
  };
 
  enemies.push(e);
@@ -2642,7 +2645,7 @@ function updateEnemy(e,dt){
     vx:random(-18,18),
     vy:random(-75,-35),
     life:.35,max:.35,
-    color:C.gold,
+    color:C.red,
     size:random(1,3)
    });
   }
@@ -2736,6 +2739,12 @@ function updateEnemy(e,dt){
  // slowest frame — from as early as depth 8, making overdrive enemies
  // flatly unescapable rather than just more dangerous for most of a run.
  const speed=e.speed*(1+R.depth*.03)*(e.slow>0?.65:1)*(e.overdrive?(e.type==="tank"?3:1.5):1)*(frenzied?FRENZY_SPEED_MULT:1);
+ // The per-enemy flankOffset (see spawn()) bends the walk-up path without
+ // touching where anything actually aims — it fades out near the player
+ // (clamp on n/280) so the approach still converges close-up instead of
+ // orbiting forever, but far out it's enough to stop a whole wave funneling
+ // into one lane behind the player and stacking there.
+ const moveAngle=a+(e.flankOffset||0)*clamp(n/280,0,1);
 
  if(e.type==="charger"){
   if(e.charge>0){
@@ -2746,8 +2755,8 @@ function updateEnemy(e,dt){
    e.tell-=dt;
    if(e.tell<=0)e.charge=.48;
   }else{
-   e.x+=Math.cos(a)*speed*dt;
-   e.y+=Math.sin(a)*speed*dt;
+   e.x+=Math.cos(moveAngle)*speed*dt;
+   e.y+=Math.sin(moveAngle)*speed*dt;
    e.fire-=dt;
 
    if(e.fire<=0){
@@ -2769,8 +2778,8 @@ function updateEnemy(e,dt){
   // whole point is trading their normal patient approach for a rush.
   const movement=frenzied?1:ranged?(n<preferred-65?-.75:n>preferred+45?1:0):1;
 
-  e.x+=Math.cos(a)*speed*movement*dt;
-  e.y+=Math.sin(a)*speed*movement*dt;
+  e.x+=Math.cos(moveAngle)*speed*movement*dt;
+  e.y+=Math.sin(moveAngle)*speed*movement*dt;
 
   if(ranged){
    if(e.tell>0){
@@ -3072,17 +3081,6 @@ function update(dt){
    room.hazardTimer=2.5;
   }
  }
-
- // Announce the moment frenzy actually kicks in for this wave — otherwise
- // "enemies suddenly got faster and started glowing" reads as a bug, not
- // a mechanic. Re-announced every wave it recurs (room.wasFrenzied resets
- // whenever room.pending refills), same as the boss enrage stages do.
- const nowFrenzied=frenzyActive();
- if(nowFrenzied&&!room.wasFrenzied){
-  label(600,155,t("frenzy_label"),C.gold,1.5);
-  sfx.bossEnrage();
- }
- room.wasFrenzied=nowFrenzied;
 
  if(room.type==="endless"){
   room.wait-=dt;
@@ -3579,11 +3577,13 @@ function drawEnemy(e){
 
   if(frenzyActive()){
     // A faster, jittery flicker than the overdrive ring's steady pulse —
-    // reads as agitated/burning rather than electrified. The ember
-    // particles emitted from updateEnemy do the rest of the "on fire" cue.
+    // reads as agitated/burning rather than electrified. Red rather than
+    // gold specifically so it doesn't get mistaken for the pulse or the
+    // Ember Seeds mutation's own fire accents. The ember particles emitted
+    // from updateEnemy do the rest of the "on fire" cue.
     ctx.save();
     ctx.globalAlpha=.55+Math.sin(e.age*16)*.3;
-    circle(e.x,e.y,e.r+6+Math.sin(e.age*22)*2,C.gold,3);
+    circle(e.x,e.y,e.r+6+Math.sin(e.age*22)*2,C.red,3);
     ctx.restore();
   }
 
@@ -4042,6 +4042,8 @@ function dash(){
  sfx.dash();
 }
 
+const PULSE_RADIUS=500;
+
 function pulse(){
  if(state!=="playing"||!P||P.energy<S.pulseCost)return;
 
@@ -4054,11 +4056,15 @@ function pulse(){
  }
 
  for(const e of enemies){
-  if(!e.dead&&distance(e,P)<500){
+  if(!e.dead&&distance(e,P)<PULSE_RADIUS){
    damageEnemy(e,S.pulseDamage);
   }
  }
 
+ // Shows the actual reach of what just happened — an expanding ring
+ // growing out to the real hit radius as it fades, same shockwave
+ // language the tank/boss explosions already use.
+ ring(P.x,P.y,C.gold,PULSE_RADIUS,.5);
  label(P.x,P.y-45,t("pulse_label"),C.gold,.8);
 }
 
