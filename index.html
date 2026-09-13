@@ -1438,7 +1438,8 @@ function enter(type){
   kills:0,
   target:endless?100+Math.floor((R.depth-27)*30):0,
   clear:0,
-  bossSpawned:false
+  bossSpawned:false,
+  hazardTimer:4
  };
 
  startCombat();
@@ -1649,10 +1650,12 @@ function workshop(){
  }
 
  const curRank=workshopRank(up.id);
- // Deliberately steep — this is meant to cost roughly what several rooms'
- // worth of scrap income would earn, since it's the only progression a
- // no-mutation run gets besides its starting frame and weapons.
- const cost=500+curRank*300;
+ // Deliberately pricier than a shop mutation/weapon — it's the only
+ // progression a no-mutation run gets besides its starting frame and
+ // weapons — but playtesting called the original 500+300/rank too steep
+ // to ever actually afford by a boss floor, especially stacked against
+ // repair costs. Roughly a normal boss-floor's income now covers rank 1.
+ const cost=320+curRank*180;
 
  const cards=[{
   title:up.name,
@@ -2991,8 +2994,23 @@ function update(dt){
  if(!P)return;
  updatePlayer(dt);
 
- if(room.type!=="boss"&&room.time>4&&hazards.filter(h=>h.type==="slow").length<2){
-  makeHazard();
+ // room.hazardTimer is the actual pacing gate — without it this check ran
+ // on every single fixed-timestep tick (up to ~120/sec), and any tick
+ // where the slow-zone cap wasn't yet full but the roll came up "blast"
+ // instead didn't fill it either, so the very next tick (a fraction of a
+ // millisecond later) tried again. A short unlucky streak of blast rolls
+ // could dump several giant blast hazards on the field within the same
+ // instant — exactly the "everything hits at once, nothing to be done"
+ // pileup reported from playtesting. Capping actual spawn attempts to
+ // once per 2.5s (while still respecting the 2-slow-zone cap) keeps
+ // hazard density predictable no matter what the roll comes up as.
+ if(room.type!=="boss"){
+  room.hazardTimer-=dt;
+
+  if(room.time>4&&room.hazardTimer<=0&&hazards.filter(h=>h.type==="slow").length<2){
+   makeHazard();
+   room.hazardTimer=2.5;
+  }
  }
 
  if(room.type==="endless"){
@@ -4012,7 +4030,16 @@ addEventListener("keydown",e=>{
   // Let the death flash play out — no menu escape mid-echo.
  }else if(/^[1-9]$/.test(k)){
   invoke(Number(k)-1);
- }else if(k==="escape"){
+ }else if(k==="escape"&&!R){
+  // Escape from any pre-run or post-run screen (title, frame select, the
+  // Garden, how-to-play, the run-end results) backs out to the title
+  // screen as before. But every one of those calls sets R to null first —
+  // an active expedition (route, shop, workshop, mutation choice, build,
+  // the pause menu) always has R set. Escape used to fall straight
+  // through to title() unconditionally, which meant hitting it during,
+  // say, the post-level-up mutation choice — a screen that pops up mid-
+  // combat, reachable at any moment via XP gain, not just from a menu —
+  // silently threw the whole run away with no confirmation.
   title();
  }
 });
