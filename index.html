@@ -2746,6 +2746,26 @@ function updateEnemy(e,dt){
  // into one lane behind the player and stacking there.
  const moveAngle=a+(e.flankOffset||0)*clamp(n/280,0,1);
 
+ // Mites (the summoner's spawn) read as "homing missiles" once frenzy's
+ // speed boost lands on them — they snap instantly to the player's exact
+ // bearing every single frame, so at frenzied speed they're functionally
+ // impossible to actually dodge. Capping how fast a mite can turn (not
+ // just its speed) keeps them fast but lets a sharp sidestep or dash
+ // genuinely lose them, the way dodging a fast-but-stiff torpedo works,
+ // instead of it just re-tracking through the turn to hit anyway. Left
+ // alone outside frenzy — mites are meant to be relentless, always-catch-
+ // you chaff there, just not at frenzy's speed.
+ let steerAngle=moveAngle;
+ if(e.type==="mite"&&frenzied){
+  if(e.heading===undefined)e.heading=moveAngle;
+  const maxTurn=4*dt;
+  let diff=moveAngle-e.heading;
+  diff=Math.atan2(Math.sin(diff),Math.cos(diff));
+  diff=clamp(diff,-maxTurn,maxTurn);
+  e.heading+=diff;
+  steerAngle=e.heading;
+ }
+
  if(e.type==="charger"){
   if(e.charge>0){
    e.x+=Math.cos(e.aim)*620*(e.overdrive?2:1)*dt;
@@ -2778,8 +2798,8 @@ function updateEnemy(e,dt){
   // whole point is trading their normal patient approach for a rush.
   const movement=frenzied?1:ranged?(n<preferred-65?-.75:n>preferred+45?1:0):1;
 
-  e.x+=Math.cos(moveAngle)*speed*movement*dt;
-  e.y+=Math.sin(moveAngle)*speed*movement*dt;
+  e.x+=Math.cos(steerAngle)*speed*movement*dt;
+  e.y+=Math.sin(steerAngle)*speed*movement*dt;
 
   if(ranged){
    if(e.tell>0){
