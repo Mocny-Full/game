@@ -2787,18 +2787,28 @@ function updateEnemy(e,dt){
 
     // The sniper's telegraph line should track where it's actually about
     // to shoot (recomputed at fire time below), not freeze at the angle
-    // from the instant the telegraph started.
-    if(e.type==="sniper")e.aim=a;
+    // from the instant the telegraph started — except in frenzy, where
+    // enemies are already up close and firing at speeds that reach the
+    // player almost instantly, so a shot re-aimed live right up to the
+    // trigger frame is functionally a homing missile: no amount of
+    // juking during the telegraph avoids it, since it just retargets to
+    // wherever you ended up. Freezing the aim the moment the telegraph
+    // starts (same as gunner already effectively does, since it never
+    // updates e.aim mid-tell) makes the whole tell window the actual
+    // dodge opportunity again.
+    if(e.type==="sniper"&&!frenzied)e.aim=a;
 
     if(e.tell<=0){
+     const shotAngle=frenzied?e.aim:a;
+
      if(e.type==="gunner"){
       for(let i=-1;i<=1;i++){
-       bullet(e.x,e.y,a+i*.17,265,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
+       bullet(e.x,e.y,shotAngle+i*.17,265,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
       }
      }
 
      if(e.type==="sniper"){
-      bullet(e.x,e.y,a,620,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
+      bullet(e.x,e.y,shotAngle,620,false,1,null,(e.overdrive?2:1)*(frenzied?FRENZY_DMG_MULT:1));
      }
 
      if(e.type==="summoner"){
